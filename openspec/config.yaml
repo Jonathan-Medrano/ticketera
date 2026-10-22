@@ -1,0 +1,96 @@
+schema: spec-driven
+
+# Project: ticketera-workspace (PlateaPro / Ticketera)
+# Migration context: MySQL/MariaDB (XAMPP) → PostgreSQL on Supabase via Prisma ORM
+# Initialized: 2026-06-01
+
+context: |
+  Project: PlateaPro / Ticketera — multi-tenant SaaS (event management, ticket sales,
+  consumables/POS, QR check-in, reseller management)
+
+  Stack — Backend:
+    - Node.js + Express 4 + TypeScript
+    - mysql2/promise (raw SQL — NO ORM currently)
+    - Node.js native test runner (tsx, transactional rollback isolation, Docker MySQL)
+    - Supabase JS client already in dependencies (@supabase/supabase-js ^2.106.0)
+    - Test command: npm test (in backend/)
+    - Test DB: Docker MySQL on port 3307 (npm run test:mysql:up)
+
+  Stack — Frontend:
+    - Next.js 16 App Router + React 19 + TypeScript
+    - Tailwind CSS 4 + shadcn/ui + Radix UI
+    - BFF pattern: browser → app/api/* → Express backend
+    - SSR direct: server components → fetchBackendFromServer()
+    - next-auth ^5 (beta)
+    - ESLint + Prettier
+
+  Architecture:
+    - Two apps (backend/ + platea/) sharing ONE MySQL DB
+    - Multi-tenant: subdomain routing via proxy.ts middleware
+    - Auth: 4 user types — empresa, empleado (RBAC), comprador, super_admin
+    - Stock locking: FOR UPDATE row locks in transactions
+    - Payment: Mercado Pago webhooks
+
+  Schema:
+    - Source of truth: backend/src/lib/backend-schema.ts (1709 lines, MySQL DDL)
+    - Runtime migrations: ALTER TABLE ... ADD COLUMN IF NOT EXISTS
+    - DB update log: actualizar db.sql (root)
+    - DB snapshot: db actualizada.sql (root)
+
+  Critical tables:
+    - checkout_sessions — payment reservations, stock locks
+    - entrada_categorias — ticket stock (stock_disponible)
+    - barra_stock — consumable stock (stock_actual)
+    - entradas — issued tickets
+    - consumibles_ventas — consumable sale records
+    - usuarios_roles, usuarios_permisos — RBAC
+
+  Testing:
+    - Backend: Node.js native test runner, real MySQL container, transactional rollback
+    - Frontend: Limited — super-admin components only (tsx --test)
+    - No E2E framework detected
+    - strict_tdd: false (frontend lacks full coverage; backend has integration tests)
+
+  Linting / Type checking:
+    - Backend: tsc (npm run build)
+    - Frontend: eslint (npm run lint), tsc, prettier (npm run format)
+
+  Agent guides:
+    - agent.md (root orchestrator)
+    - backend/backend-agent.md
+    - backend/db-agent.md
+    - platea/frontend-agent.md
+
+rules:
+  proposal:
+    - Include rollback plan for every schema change
+    - Note Mercado Pago / auth flow impact when payment or session tables change
+    - Reference affected critical tables (checkout_sessions, entrada_categorias, barra_stock)
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - For DB changes: include both Prisma migration SQL and backward-compat note
+  design:
+    - Include sequence diagrams for checkout/payment flows
+    - Document architecture decisions with rationale
+    - For Prisma migration: include schema.prisma snippet and migration strategy
+  tasks:
+    - Group by phase (Backend DB / Backend API / Frontend / Testing / Infra)
+    - Use hierarchical numbering
+    - Keep tasks completable in one session
+    - Mark DB tasks with [DB] prefix — they also require entry in actualizar db.sql
+  apply:
+    - Follow existing raw SQL patterns until Prisma migration is complete for that domain
+    - Never skip FOR UPDATE locks on stock operations
+    - Never remove rate limiting without explicit approval
+    - DB changes: add SQL to actualizar db.sql with date comment
+    - Use ALTER TABLE ... ADD COLUMN IF NOT EXISTS (MariaDB/XAMPP safe)
+    tdd: false
+    test_command: "cd backend && npm test"
+  verify:
+    test_command: "cd backend && npm test"
+    build_command: "cd platea && npm run build && cd ../backend && npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas (DROP TABLE, DROP COLUMN, schema rewrites)
+    - Update actualizar db.sql if any schema changes were applied

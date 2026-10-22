@@ -1,0 +1,11 @@
+import { NextRequest } from "next/server"
+import { proxyToBackend } from "@/lib/backend-proxy"
+
+export const GET = (req: NextRequest, { params }: { params: Promise<{ id: string }> }) =>
+  params.then(({ id }) => proxyToBackend(req, `/api/marketing/campanas/${id}`))
+
+export const PUT = (req: NextRequest, { params }: { params: Promise<{ id: string }> }) =>
+  params.then(({ id }) => proxyToBackend(req, `/api/marketing/campanas/${id}`))
+
+export const DELETE = (req: NextRequest, { params }: { params: Promise<{ id: string }> }) =>
+  params.then(({ id }) => proxyToBackend(req, `/api/marketing/campanas/${id}`))

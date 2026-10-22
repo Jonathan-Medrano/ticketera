@@ -1,0 +1,82 @@
+# Design: Consumibles buyer partial refunds
+
+## Technical Approach
+
+Agregar un overlay de refund buyer itemizado PRE-canje, separado del cierre terminal de barra. `refund_manual_cases` sigue siendo el control plane de revisión manual, pero la operativa nueva vive en tablas hijas por `venta_item_id` y solo descuenta del QR cuando una cantidad quedó `executed`. `mis-consumibles` pasa a ser la fuente buyer principal; `mis-tickets` debe reutilizar ese contrato/copy para no divergir.
+
+## Architecture Decisions
+
+| Decision | Alternatives considered | Rationale |
+|---|---|---|
+| Usar tablas nuevas de refund buyer por item/cantidad | Reusar `consumibles_venta_resolucion_items` | Esa tabla hoy significa resolución terminal de barra. Reutilizarla cerraría o ensuciaría QRs todavía canjeables. |
+| Mantener `refund_manual_cases` + `flow='consumibles'`, pero con `request_origin='buyer_consumible_request'` | Crear un sistema paralelo fuera de Reembolsos | Reembolsos ya resuelve auditoría, timeline, ownership y filtros; solo falta granularidad por producto. |
+| Para consumibles buyer, reemplazar approve/execute genérico por revisión+ejecución manual itemizada | Copiar el flujo de entradas | Entradas cancelan targets completos. Acá hace falta ejecutar cantidades parciales sin cancelar la venta completa salvo refund total. |
+| Descontar solo cantidades `executed` al canjear | Bloquear desde `requested` o `under_review` | El QR no debe perder disponibilidad por una solicitud todavía no resuelta. |
+
+## Data Flow
+
+Buyer UI → `POST /api/tenant/:slug/consumibles-refund-requests`
+→ `createBuyerConsumibleRefundRequest()`
+→ `refund_manual_cases` + `refund_manual_case_consumible_items`
+→ Dashboard Reembolsos revisa/ejecuta/rechaza por item
+→ `refund_manual_case_consumible_items.status='executed'`
+→ `previewConsumiblesRedeem()` / `resolveConsumiblesRedeem()` restan cantidades ejecutadas
+
+Si una línea tiene `cantidad=5` y `executed=2`, barra solo puede entregar 3. Si todas las líneas quedan totalmente refundadas, la venta pasa a `cancelado`; si queda remanente, sigue `pendiente`.
+
+## File Changes
+
+| File | Action | Description |
+|---|---|---|
+| `backend/src/lib/backend-schema.ts` | Modify | Crear tablas `refund_manual_case_consumible_items` y `refund_manual_case_consumible_item_events` (o equivalente), más índices por `case_id`, `venta_id`, `venta_item_id`, `status`. |
+| `backend/src/lib/refund-manual.ts` | Modify | Agregar `buyer_consumible_request`, creación buyer itemizada, lectura de detalle por producto, ejecución/rechazo manual para consumibles y cierre total/parcial de venta según cantidades ejecutadas. |
+| `backend/src/lib/consumibles-redeem.ts` | Modify | Calcular `cantidad_disponible = cantidad_original - cantidad_refundeda_ejecutada`; impedir entregar refundado sin cerrar ventas parcialmente refundadas. |
+| `backend/src/routes/tenant.ts` | Modify | Enriquecer `GET /mis-consumibles` con elegibilidad/request/outcome por item y agregar endpoint buyer específico para consumibles. |
+| `platea/app/api/tenant/[slug]/consumibles-refund-requests/route.ts` | Create | Proxy dedicado; evita mezclar contrato de entradas en `/refunds`. |
+| `platea/components/tenant/mis-consumibles-content.tsx` | Modify | CTA buyer, selector por producto/cantidad, estados `requested/under_review/executed/rejected/non_refundable`, y cantidades no retirables. |
+| `platea/components/tenant/mis-tickets-content.tsx` | Modify | Alinear la pestaña consumibles con el contrato nuevo o delegar a la misma presentación/copy. |
+| `platea/components/dashboard/reembolsos-model.ts` | Modify | Nuevos tipos/actions para detalle itemizado de consumibles buyer. |
+| `platea/components/dashboard/reembolsos-content.tsx` | Modify | Revisión y ejecución manual por producto/cantidad con evidencia/referencia externa. |
+
+## Interfaces / Contracts
+
+```ts
+type BuyerConsumibleRefundItemInput = {
+  venta_id: string
+  venta_item_id: string
+  quantity_requested: number
+}
+```
+
+`GET /mis-consumibles` por item agrega:
+
+```ts
+refund?: {
+  eligible_quantity: number
+  existing_request?: { case_id: string; status: string }
+  executed_quantity: number
+  rejected_quantity: number
+}
+```
+
+Dashboard detail agrega, por item de caso consumibles:
+
+```ts
+{ venta_item_id, nombre, quantity_requested, quantity_approved, quantity_executed, amount_snapshot, status }
+```
+
+## Testing Strategy
+
+| Layer | What to Test | Approach |
+|---|---|---|
+| Unit | Cálculo de elegibilidad y cantidad disponible | Tests sobre helpers de refund itemizado y redeem overlay. |
+| Integration | Crear request buyer, ejecutar parcial, cierre total/parcial | Tests backend sobre `refund-manual.ts` + `consumibles-redeem.ts` con DB real/test fixture. |
+| UI | Copy/CTA y estados buyer/manual review | Tests de componentes en `mis-consumibles`, `mis-tickets` y `reembolsos-*`. |
+
+## Migration / Rollout
+
+Sin migración destructiva. Se agregan tablas/índices nuevos y un origen nuevo. Rollout seguro porque NO toca el auto-refund terminal de barra existente; solo suma un overlay leído por canje y vistas buyer.
+
+## Open Questions
+
+- [ ] Confirmar si consumibles buyer salta directo de `under_review` a `executed`, o si se necesita un estado intermedio visible (`approved_for_manual_execution`) también a nivel item.

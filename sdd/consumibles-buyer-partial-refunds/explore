@@ -1,0 +1,68 @@
+## Exploration: consumibles-buyer-partial-refunds
+
+### Current State
+- El comprador hoy tiene **dos vistas** de consumibles: `platea/components/tenant/mis-consumibles-content.tsx` (standalone, más rica) y la pestaña consumibles dentro de `platea/components/tenant/mis-tickets-content.tsx` (más vieja y sin modelo de refunds). ESTÁN desalineadas.
+- `GET /api/tenant/:slug/mis-consumibles` (`backend/src/routes/tenant.ts`) devuelve ventas buyer por QR/barra con `estado`, `items`, y desde el slice de barra también `delivered_amount`, `refunded_amount` y resolución por item. NO devuelve metadata de solicitud buyer ni elegibilidad por producto.
+- El modelo buyer self-service existente solo aplica a **entradas**. `POST /api/tenant/:slug/refunds` llama `createBuyerEventRefundRequest()` en `backend/src/lib/refund-manual.ts`, crea `refund_manual_cases` con `request_origin='buyer_event_request'`, vincula una `entrada`, y `mis-tickets` expone `eligible` + `existing_request`.
+- El dominio de Reembolsos ya soporta `flow='consumibles'`, pero hoy está pensado para dos casos muy distintos:
+  - casos manuales de empresa con items `consumible_venta`
+  - casos automáticos `bar_stockout_auto` ya **ejecutados** por el flujo de barra
+- Para consumibles, Reembolsos hoy bloquea approve/execute genérico: `approveRefundManualCase()` y `executeRefundManualCase()` rechazan `flow='consumibles'`; la UI solo ofrece `resolve_non_refundable`.
+- El canje en barra valida en `backend/src/lib/consumibles-redeem.ts`. Tanto `previewConsumiblesRedeem()` como `resolveConsumiblesRedeem()` SOLO aceptan `consumibles_ventas.estado='pendiente'`. Si la venta está `canjeado`, `cancelado` o `resuelto_parcial`, el QR queda cerrado y no se puede volver a usar.
+- El flujo de barra ya implementado es **terminal**: al refundear por faltante, crea `refund_manual_cases` `executed`, persiste `consumibles_venta_resolucion_items`, ajusta montos, y cierra la venta. Eso convive bien con el scan porque el QR deja de ser `pendiente`.
+- Problema central: el buyer refund parcial necesita refundear **algunos productos antes del canje total**, dejando el QR todavía usable para el resto. El modelo actual no soporta ese estado intermedio: o la venta está `pendiente` completa, o queda cerrada completa/parcial por barra.
+
+### Affected Areas
+- `backend/src/routes/tenant.ts` — hoy expone `mis-consumibles` sin refund metadata y solo tiene `POST /:slug/refunds` para entradas.
+- `backend/src/lib/refund-manual.ts` — hay que separar consumibles buyer request de bar auto refund y del flujo de entradas; hoy consumibles no tienen ejecución manual item-level.
+- `backend/src/lib/consumibles-redeem.ts` — preview/resolve deben ignorar cantidades ya refundedas al comprador y jamás aceptar esas cantidades en un scan posterior.
+- `backend/src/lib/backend-schema.ts` — falta persistencia para solicitudes buyer itemizadas sobre `consumibles_venta_items` sin reutilizar la tabla terminal de resolución de barra.
+- `platea/components/tenant/mis-consumibles-content.tsx` — mejor candidato para CTA buyer, selección por producto/cantidad y estado final.
+- `platea/components/tenant/mis-tickets-content.tsx` — hoy duplica UI de consumibles con contrato viejo; si no se alinea, el comprador verá estados distintos según la pantalla.
+- `platea/components/dashboard/reembolsos-model.ts` y `reembolsos-content.tsx` — hoy tratan todos los consumibles como “no reembolsables” salvo el auto-flow ya ejecutado.
+- `platea/app/api/tenant/[slug]/refunds/route.ts` — el endpoint actual está especializado en entradas; ampliar ese contrato en el mismo path sería riesgoso.
+
+### Approaches
+1. **Reusar la venta/QR como única unidad de refund** — crear casos buyer sobre `consumible_venta` completa y resolverlos con el modelo actual.
+   - Pros: reaprovecha tablas y pantallas existentes.
+   - Cons: rompe el requerimiento de selección por producto; no distingue cantidades dentro de una línea; obliga a cerrar o bloquear todo el QR; choca con el flujo bar ya implementado; y si se reutiliza ejecución actual para consumibles se arriesga refund incorrecto sobre una compra que puede tener varias ventas/QRs.
+   - Effort: Medium
+
+2. **Agregar una capa separada de buyer refund itemizado pre-canje** — mantener la venta `pendiente`, registrar solicitudes y resultados por `venta_item_id`/cantidad, y hacer que el scan solo vea cantidades todavía entregables.
+   - Pros: preserva el flujo de barra terminal ya construido; soporta selección por producto/cantidad; evita cerrar el QR entero cuando solo se refundea una parte; permite mostrar estado/request outcome al buyer por línea; y hace cumplir que lo ya refundedo no vuelva a aceptarse en barra.
+   - Cons: exige un overlay operativo nuevo además del caso de Reembolsos; hay que sincronizar dos vistas buyer hoy duplicadas; y Reembolsos necesita acciones específicas para consumibles buyer en vez del bloqueo global actual.
+   - Effort: High
+
+### Recommendation
+Recomiendo **Approach 2**.
+
+La forma MÁS SEGURA de modelarlo sin romper `consumibles-bar-partial-refunds` es:
+
+- **NO reutilizar** `consumibles_venta_resolucion_items` para la solicitud buyer. Esa tabla hoy significa cierre terminal de barra. Si la tocás antes de tiempo, `previewConsumiblesRedeem()` deja de representar correctamente un QR todavía pendiente.
+- Crear una persistencia separada para el pedido/refund buyer por item y cantidad, por ejemplo una tabla hija del caso manual (`refund_manual_case_consumible_items` o equivalente) con `case_id`, `venta_id`, `venta_item_id`, `cantidad_solicitada`, `cantidad_aprobada/ejecutada`, `monto_snapshot`, `estado_item`.
+- Mantener `refund_manual_cases` como **control plane** de revisión, pero agregar un origen explícito, por ejemplo `buyer_consumible_request`, para no mezclar semánticamente entradas buyer con faltantes automáticos de barra.
+- Para la **verdad operativa del scan**, introducir un overlay de refund buyer ejecutado por item/cantidad que `previewConsumiblesRedeem()` y `resolveConsumiblesRedeem()` resten del total original. En otras palabras: el scan debe operar sobre `cantidad_disponible_para_entrega = cantidad_original - cantidad_refundeda_ejecutada_previa`.
+- Solo las cantidades con outcome final **refund ejecutado** deben bloquear el canje posterior. Un pedido `requested` o `under_review` NO debería descontar del QR todavía. Si se necesita evitar el estado ambiguo “approved pero todavía no refundedo”, el flujo consumibles buyer debería saltar de `under_review` a una acción terminal manual tipo `executed` con evidencia/referencia externa, en vez de copiar el approve/execute de entradas.
+- Cuando el refund buyer ejecutado cubre TODA la venta, recién ahí conviene cerrar `consumibles_ventas` como `cancelado`. Si cubre solo una parte, la venta debería seguir `pendiente`, pero con líneas/cantidades ya no canjeables por overlay itemizado.
+- La UI buyer debería apoyarse en `mis-consumibles` como fuente principal y reflejar:
+  - elegibilidad por línea/cantidad mientras el QR está pendiente
+  - request state (`requested`, `under_review`)
+  - final outcome (`executed`, `rejected`, `resolved_non_refundable`)
+  - cantidades ya refundedas que no podrán retirarse
+- La pestaña consumibles de `mis-tickets` hoy está atrasada respecto de `mis-consumibles`. Para no duplicar bugs, el proposal debería elegir UNA fuente/UI base y alinear la otra, no inventar dos CTAs distintas.
+
+### Risks
+- Si se modela el buyer refund como cierre terminal de la venta, se rompe la coexistencia con el QR parcialmente todavía retirable.
+- Si se reaprovecha `executeRefundManualCase()` de entradas, hoy usa un camino pensado para refund total/entrada y no para consumibles buyer itemizados; es un riesgo real de contrato y de monto.
+- `refund_manual_case_items` hoy apunta a `consumible_venta`, no a `venta_item_id`; sin una capa hija o extensión equivalente, la revisión manual no puede mostrar ni ejecutar selección exacta por producto.
+- `mis-consumibles` y `mis-tickets` ya están desfasados; si se actualiza solo una, el comprador va a ver request state en una pantalla y nada en la otra.
+- `resolveConsumiblesRedeem()` hoy valida contra la cantidad original de cada línea. Si no se resta el refund buyer ejecutado antes de construir el draft de canje, barra podría aceptar unidades que ya fueron devueltas.
+
+### Ready for Proposal
+Yes — si la propuesta se limita a:
+- solicitud buyer manual itemizada desde la vista de consumibles,
+- revisión en Reembolsos con origen específico para consumibles buyer,
+- bloqueo de canje SOLO para cantidades finalmente refundedas,
+- y alineación mínima de las dos vistas buyer de consumibles.
+
+La propuesta debería evitar explícitamente dos cosas: (1) tocar el flujo automático de barra ya ejecutado, y (2) reusar el contrato de entradas como si consumibles fuera el mismo problema.

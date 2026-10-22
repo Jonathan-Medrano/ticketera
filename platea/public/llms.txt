@@ -1,0 +1,57 @@
+# Ticketera
+
+> Ticketera todo-en-uno para eventos, boliches y productoras en Argentina.
+
+Ticketera es una plataforma SaaS multi-tenant para organizar y vender eventos en Argentina. Combina venta de entradas online con subdominio propio (white-label), control de barra/POS, check-in con QR, gestión de revendedores, campañas de email y cobro directo a través del Mercado Pago del organizador.
+
+## Modelo de negocio
+
+- Sin costo fijo mensual
+- Comisión del 4% sobre tickets vendidos online (3% para productoras de alto volumen)
+- Ventas en puerta (POS) y consumibles de barra: 0% de comisión — son 100% del organizador
+- El dinero de cada venta va directamente al Mercado Pago del organizador — Ticketera no retiene fondos
+- Revisión manual de cuentas nuevas (aprobación en el día)
+
+## Funcionalidades principales
+
+- Sitio de venta público con subdominio propio (tuempresa.ticketera.com)
+- Venta de entradas por tandas y categorías con control de stock
+- Check-in QR con app mobile para porteros y personal de acceso
+- Sistema de barra y consumibles (POS): venta, canje, restock y control de stock en tiempo real
+- Gestión de equipo con roles granulares (puerta, vendedor, operador, barra, revendedor, admin)
+- Revendedores con panel propio y comisiones configurables
+- Campañas de email marketing integradas (carrito abandonado, recordatorios)
+- Panel de analytics para el organizador: ventas, accesos, barra, ingresos
+
+## Diferenciadores vs competidores
+
+- Pago instantáneo a Mercado Pago propio del organizador (vs. liquidación a 5+ días de otros)
+- Barra/POS + ticketing en una sola plataforma (vs. herramientas separadas)
+- White-label: cada productora tiene su propia marca, subdominio y experiencia
+- Exclusivo para Argentina: operación en ARS, integrado con ecosistema local
+
+## Cobertura geográfica
+
+Argentina (exclusivo)
+
+## Tipos de eventos
+
+Boliches, after hours, festivales de música electrónica, recitales, teatro, deportes, eventos corporativos, ferias.
+
+## Preguntas frecuentes
+
+**¿Cuánto cobra Ticketera?** Comisión del 4% sobre tickets vendidos online. Las ventas en puerta y barra (POS) no pagan comisión. Sin costo fijo mensual.
+
+**¿Cuándo recibo el dinero de las ventas?** Al instante — cada venta va directo a tu cuenta de Mercado Pago.
+
+**¿Puedo vender con mi propia marca?** Sí. Cada productora tiene su subdominio (tuempresa.ticketera.com) con logo, colores y galería propios.
+
+**¿Funciona para boliches?** Sí. Ticketera incluye sistema de barra (POS) para vender y canjear consumibles, con control de stock en tiempo real.
+
+**¿Cómo es el control de acceso?** Mediante QR único por entrada, escaneado con app mobile. Anti-fraude y anti-reventa.
+
+**¿Puedo tener revendedores?** Sí. Cada revendedor tiene su panel propio, cupo de venta configurable y comisión personalizable.
+
+## URL
+
+https://ticketera.com

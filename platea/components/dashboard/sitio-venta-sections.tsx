@@ -1,0 +1,13 @@
+"use client"
+
+export type { GaleriaFotoItem, SitioVentaForm, SitioVentaEmpresa, SupportFaqDraft } from "./sitio-venta/types"
+export { PLANTILLAS_SITIO, BrandingVisualSection, ImagenesSection } from "./sitio-venta/branding-section"
+export { EditorialHomeSection, PresentacionHomeSection, EventCardsSection, LayoutHomeSection } from "./sitio-venta/home-section"
+export { SectionsOrderManager } from "./sitio-venta/sections-order-manager"
+export { InformacionSection } from "./sitio-venta/informacion-section"
+export { FaqSection } from "./sitio-venta/faq-section"
+export { AnnouncementSection } from "./sitio-venta/announcement-section"
+export { SocialLinksSection } from "./sitio-venta/social-links-section"
+export { PlantillasGuardadasSection } from "./sitio-venta/plantillas-guardadas-section"
+export { SectionCard, ColorInput } from "./sitio-venta/shared-ui"
+export type { TenantHomeBannerSection, TenantHomeSponsorsCarouselSection, TenantHomeSponsorItem, TenantHomeSection } from "@/lib/tenant-home-sections"

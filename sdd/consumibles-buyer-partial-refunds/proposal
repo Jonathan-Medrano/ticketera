@@ -1,0 +1,66 @@
+# Proposal: Consumibles Buyer Partial Refunds
+
+## Intent
+
+Habilitar que el comprador pida refund parcial por producto/cantidad en sus consumibles antes del canje total, sin romper el QR restante, con revisión manual en Reembolsos y bloqueo definitivo de scan solo para cantidades finalmente refundedas.
+
+## Scope
+
+### In Scope
+- Solicitud buyer self-service por `venta_item_id` y cantidad desde la experiencia de mis consumibles.
+- Casos manuales en Reembolsos con origen específico para consumibles buyer y convivencia con `bar_stockout_auto`.
+- Overlay operativo para que preview/resolve de canje resten cantidades refundedas ejecutadas y nunca permitan escanearlas.
+- Alineación mínima entre `mis-consumibles` y la vista legacy de consumibles en `mis-tickets`.
+
+### Out of Scope
+- Rediseño del flujo/barra POS o del contrato de auto-refund de faltantes.
+- Entradas u otros dominios no consumibles.
+
+## Capabilities
+
+### New Capabilities
+- `buyer-consumible-refunds`: solicitud manual buyer itemizada, estados por request y outcome final por producto/cantidad.
+
+### Modified Capabilities
+- `consumibles-redeem`: excluir cantidades con refund buyer ejecutado del preview y del resolve de canje.
+- `refund-review-console`: permitir revisión y resolución manual de consumibles buyer sin tratar todo consumibles como no reembolsable.
+
+## Approach
+
+Agregar una persistencia separada para requests buyer itemizadas ligada a `refund_manual_cases`, con `request_origin` explícito y snapshot monetario por línea. Mantener `refund_manual_cases` como control plane de revisión; NO reutilizar `consumibles_venta_resolucion_items` antes del cierre terminal de barra. El canje operará sobre cantidad disponible = original - refund ejecutado buyer. Solo `executed` bloquea scan; `requested/under_review` no descuentan stock ni QR.
+
+## Affected Areas
+
+| Area | Impact | Description |
+|------|--------|-------------|
+| `backend/src/lib/backend-schema.ts` | Modified | Persistencia itemizada buyer refund para consumibles. |
+| `backend/src/lib/refund-manual.ts` | Modified | Nuevo origen y acciones manuales para consumibles buyer. |
+| `backend/src/lib/consumibles-redeem.ts` | Modified | Restar cantidades refundedas ejecutadas del canje. |
+| `backend/src/routes/tenant.ts` | Modified | Elegibilidad/status buyer y endpoint consumibles refund. |
+| `platea/app/api/tenant/[slug]/refunds/route.ts` | Modified | Contrato BFF para buyer refunds de consumibles. |
+| `platea/components/tenant/mis-consumibles-content.tsx` | Modified | CTA, selección por item/cantidad y estados. |
+| `platea/components/tenant/mis-tickets-content.tsx` | Modified | Alinear estados/CTA legacy. |
+| `platea/components/dashboard/reembolsos-*.ts*` | Modified | Review y resolución para consumibles buyer. |
+
+## Risks
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Cerrar el QR completo por error | Med | Mantener overlay separado del modelo terminal de barra. |
+| Refundear montos/cantidades incorrectas | Med | Snapshot por item + validaciones contra venta confirmada. |
+| UI buyer inconsistente entre vistas | High | Definir `mis-consumibles` como fuente primaria y alinear la legacy. |
+
+## Rollback Plan
+
+Desactivar el CTA buyer de consumibles, dejar Reembolsos consumibles buyer en solo lectura, y revertir el overlay de canje para volver al comportamiento actual sin tocar `bar_stockout_auto` ni resoluciones terminales existentes.
+
+## Dependencies
+
+- Migración de schema para requests itemizadas buyer sobre consumibles.
+
+## Success Criteria
+
+- [ ] El comprador puede pedir refund parcial por producto/cantidad desde sus consumibles.
+- [ ] Reembolsos distingue buyer consumibles de auto-refunds de barra y permite revisión manual.
+- [ ] Un producto/cantidad con refund ejecutado ya no puede canjearse por scan.
+- [ ] Un refund parcial no cierra el QR completo mientras queden cantidades entregables.

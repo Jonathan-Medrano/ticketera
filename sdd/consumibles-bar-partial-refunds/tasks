@@ -1,0 +1,55 @@
+# Tasks: Consumibles Bar Partial Refunds
+
+## Review Workload Forecast
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | 700-950 |
+| 400-line budget risk | High |
+| Chained PRs recommended | Yes |
+| Suggested split | PR 1 backend schema+refund core → PR 2 routes+queries → PR 3 dashboard+buyer UI |
+| Delivery strategy | ask-on-risk |
+| Chain strategy | pending |
+
+Decision needed before apply: Yes
+Chained PRs recommended: Yes
+Chain strategy: pending
+400-line budget risk: High
+
+### Suggested Work Units
+
+| Unit | Goal | Likely PR | Notes |
+|------|------|-----------|-------|
+| 1 | Persistir resolución itemizada y refund parcial seguro | PR 1 | Base main; incluir tests unitarios de cálculo/idempotencia. |
+| 2 | Exponer estados/montos nuevos en rutas y queries operativas | PR 2 | Depende de PR 1; validar ventas, tenant y reembolsos. |
+| 3 | Adaptar dashboard y buyer al cierre mixto | PR 3 | Depende de PR 2; cerrar UX scan, ventas e historial. |
+
+## Phase 1: Foundation
+
+- [ ] 1.1 Modificar `backend/src/lib/backend-schema.ts` para agregar `resuelto_at`, `delivered_amount`, `refunded_amount`, `refund_case_id`, estado `resuelto_parcial`, tabla `consumibles_venta_resolucion_items` y origen `bar_stockout_auto`.
+- [ ] 1.2 Definir en `backend/src/lib/consumibles-redeem.ts` el contrato `ConsumibleResolutionInput` y validaciones: cada línea debe cerrar `cantidad_entregada + cantidad_reembolsada = cantidad`.
+- [ ] 1.3 Extender `backend/src/lib/refund-manual.ts` con refund parcial por `amount`, labels de consumibles y idempotency key por caso/payment.
+
+## Phase 2: Core Implementation
+
+- [ ] 2.1 Reemplazar `confirmConsumiblesRedeem()` en `backend/src/lib/consumibles-redeem.ts` por `resolverConsumiblesRedeem()` con lock de venta/items/checkout payment y persistencia itemizada.
+- [ ] 2.2 Implementar en `backend/src/lib/consumibles-redeem.ts` el cálculo monetario entregado vs reembolsado, creación de `refund_manual_cases` y rollback completo si Mercado Pago falla.
+- [ ] 2.3 Crear en `backend/src/lib/platform-profit-sharing.ts` un helper de reverso proporcional por `source_id` para consumibles parcialmente refundados sin tocar `barra_stock.stock_actual`.
+
+## Phase 3: Integration / Wiring
+
+- [ ] 3.1 Modificar `backend/src/routes/canjear.ts` para aceptar `accion: 'resolver'` con items y mantener `confirmar` como shorthand de “todo entregado”.
+- [ ] 3.2 Actualizar `backend/src/routes/ventas.ts`, `backend/src/routes/tenant.ts` y `backend/src/routes/reembolsos.ts` para exponer `resuelto_parcial`, montos finales y origen operativo de refund.
+- [ ] 3.3 Ajustar `platea/components/dashboard/reembolsos-model.ts` para mapear `bar_stockout_auto` sin romper filtros existentes.
+
+## Phase 4: UI / Buyer Visibility
+
+- [ ] 4.1 Modificar `platea/components/dashboard/consumibles-canjear-content.tsx` para resolver por item/cantidad, marcar verde/rojo y confirmar refund por faltante.
+- [ ] 4.2 Modificar `platea/components/dashboard/consumibles-ventas-content.tsx` y `platea/components/dashboard/reembolsos-content.tsx` para mostrar estado mixto, montos entregados/reembolsados y badge operativo.
+- [ ] 4.3 Modificar `platea/components/tenant/mis-tickets-content.tsx` para mostrar el cierre buyer con desglose final, sin acciones self-service.
+
+## Phase 5: Testing / Verification
+
+- [ ] 5.1 Escribir tests unitarios en `backend/src/lib/consumibles-redeem.ts` y/o `backend/src/lib/platform-profit-sharing.ts` para cantidades, montos, idempotencia y reverso proporcional.
+- [ ] 5.2 Agregar tests de integración para `backend/src/routes/canjear.ts`, `backend/src/routes/reembolsos.ts` y `backend/src/routes/tenant.ts`: total, parcial, 100% refund y rollback ante falla de MP.
+- [ ] 5.3 Verificar en UI dashboard/buyer el escenario mixto del spec y confirmar que `confirmar` sigue cerrando “todo entregado” sin refund.

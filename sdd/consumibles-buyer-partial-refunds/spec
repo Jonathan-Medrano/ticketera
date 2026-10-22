@@ -1,0 +1,104 @@
+# buyer-consumible-refunds Specification
+
+## Purpose
+
+Define buyer self-service partial refund requests for consumibles by product line and quantity.
+
+## Requirements
+
+### Requirement: Buyer creates itemized consumible refund requests
+
+The system MUST let a buyer request a refund for one or more consumible purchase lines by `venta_item_id` and requested quantity while the purchase still has redeemable quantity.
+
+#### Scenario: Buyer submits partial refund
+
+- GIVEN a buyer consumible purchase with pending redeemable quantity
+- WHEN the buyer requests refund for a specific product line and quantity within the remaining quantity
+- THEN the system records a manual refund request for that line and quantity
+- AND the buyer can see the request state for that requested quantity
+
+#### Scenario: Buyer exceeds remaining quantity
+
+- GIVEN a buyer consumible line whose remaining quantity is lower than requested
+- WHEN the buyer submits a refund request above the remaining quantity
+- THEN the system MUST reject the request
+
+### Requirement: Buyer sees request and final outcome by quantity
+
+The system MUST expose request state and final outcome per consumible line quantity, including `requested`, `under_review`, `executed`, `rejected`, and `resolved_non_refundable`.
+
+#### Scenario: Pending review does not imply final refund
+
+- GIVEN a buyer request in `requested` or `under_review`
+- WHEN the buyer views consumibles
+- THEN the system shows that quantity as requested but not yet finally refunded
+
+# consumibles-redeem Specification
+
+## Purpose
+
+Define how consumible redeem preview and scan treat buyer refunds before full QR closure.
+
+## Requirements
+
+### Requirement: Redeem excludes only executed buyer refunded quantities
+
+The system MUST calculate redeemable quantity as original purchased quantity minus only buyer refund quantities whose final outcome is `executed`.
+
+#### Scenario: Executed partial refund reduces scanable quantity
+
+- GIVEN a consumible line with original quantity 5 and executed buyer refund quantity 2
+- WHEN preview or resolve redeem evaluates the QR
+- THEN the system treats only quantity 3 as redeemable
+
+#### Scenario: Under-review refund does not reduce scanable quantity
+
+- GIVEN a consumible line with a buyer refund request still `requested` or `under_review`
+- WHEN preview or resolve redeem evaluates the QR
+- THEN the system MUST ignore that pending request for redeem quantity calculation
+
+### Requirement: Non-refunded quantities remain redeemable
+
+The system SHALL keep the QR redeemable for all quantities not finally refunded, and SHALL NOT close the full QR only because a partial buyer refund was executed.
+
+#### Scenario: Partial refund preserves remaining redemption
+
+- GIVEN a QR with at least one quantity still not finally refunded
+- WHEN a bar scans the QR after a partial executed buyer refund
+- THEN the remaining non-refunded quantity can still be previewed and redeemed
+
+# refund-review-console Specification
+
+## Purpose
+
+Define manual review behavior for buyer consumible refund cases inside Reembolsos.
+
+## Requirements
+
+### Requirement: Reembolsos distinguishes buyer consumible refund cases
+
+The system MUST route buyer consumible refund requests into Reembolsos as manual-review cases with an origin that distinguishes them from bar auto-refunds.
+
+#### Scenario: Buyer request appears in manual review
+
+- GIVEN a buyer submitted consumible refund request
+- WHEN the refunds team opens Reembolsos
+- THEN the case appears as a consumibles buyer manual-review case
+- AND it is not treated as a `bar_stockout_auto` case
+
+### Requirement: Manual resolution controls redeem blocking
+
+The system MUST make redeem blocking depend on the final manual resolution outcome for each requested quantity, so that only `executed` quantities become non-redeemable.
+
+#### Scenario: Executed resolution blocks only approved quantity
+
+- GIVEN a review case resolved with executed refund for part of a consumible line
+- WHEN the buyer later presents the QR for redeem
+- THEN only that executed quantity is non-redeemable
+- AND all remaining quantity stays redeemable
+
+#### Scenario: Rejected or non-refundable resolution keeps quantity redeemable
+
+- GIVEN a review case resolved as `rejected` or `resolved_non_refundable`
+- WHEN the buyer later presents the QR for redeem
+- THEN the originally requested quantity remains redeemable

@@ -1,0 +1,83 @@
+## Implementation Progress
+
+**Change**: consumibles-buyer-partial-refunds
+**Mode**: Strict TDD
+
+### Completed Tasks
+- [x] 1.1 Add buyer consumible refund item tables and indexes
+- [x] 1.2 Extend refund manual domain for `buyer_consumible_request`
+- [x] 1.3 Add backend validation tests for partial request and over-request rejection
+- [x] 2.1 Create buyer consumible refund requests with case-item persistence
+- [x] 2.2 Execute/reject buyer consumible quantities manually and recalculate sale state
+- [x] 2.3 Subtract only executed buyer refund quantities from redeem preview/resolve
+- [x] 2.4 Cover executed partial refund and pending-review no-op in backend integration tests
+- [x] 3.1 Enrich `mis-consumibles` with per-item refund state
+- [x] 3.2 Add dedicated tenant BFF proxy for consumible refund requests
+- [x] 3.3 Add buyer CTA and per-item quantity selection in `mis-consumibles`
+- [x] 3.4 Mirror consumible refund state copy in legacy `mis-tickets`
+- [x] 4.1 Extend dashboard refund model for buyer consumible review
+- [x] 4.2 Enable manual execute path for buyer consumible cases in Reembolsos
+- [x] 4.3 Add frontend tests for buyer consumible state and dashboard actions
+- [x] 4.4 Keep buyer-visible progression `under_review -> executed` only
+
+### Files Changed
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `backend/src/lib/backend-schema.ts` | Modified | Added buyer consumible case-item tables, item events, sale lookup column, and indexes. |
+| `backend/src/lib/refund-manual.ts` | Modified | Added buyer consumible request creation, detail loading, manual execute/reject handling, and sale-state sync. |
+| `backend/src/lib/consumibles-redeem.ts` | Modified | Overlaid executed buyer refund quantities onto redeem preview/resolve availability. |
+| `backend/src/routes/tenant.ts` | Modified | Added buyer consumible request endpoint and enriched `mis-consumibles` refund metadata. |
+| `backend/src/consumibles-buyer-partial-refunds.test.ts` | Created | Added integration tests for buyer request creation, over-request rejection, and redeem overlay. |
+| `platea/app/api/tenant/[slug]/consumibles-refund-requests/route.ts` | Created | Added dedicated frontend proxy route for buyer consumible refund requests. |
+| `platea/components/tenant/buyer-consumibles-contract.ts` | Created | Centralized the buyer consumibles tenant contract so pages and client views share the same typed payload shape. |
+| `platea/components/tenant/mis-consumibles-content.tsx` | Modified | Added buyer partial refund CTA, quantity selection, submit handling, and item-level refund copy. |
+| `platea/components/tenant/mis-consumibles-content.test.tsx` | Modified | Covered buyer-facing quantity/outcome rendering. |
+| `platea/components/tenant/mis-tickets-content.tsx` | Modified | Mirrored consumible refund availability and executed-state copy helpers. |
+| `platea/components/tenant/mis-tickets-content.test.tsx` | Modified | Covered consumible refund status/availability copy. |
+| `platea/app/consumibles/mis-compras/page.tsx` | Modified | Switched the server response typing to the shared buyer consumibles contract. |
+| `platea/app/t/[tenant]/consumibles/mis-compras/page.tsx` | Modified | Reused the shared buyer consumibles contract for tenant-path mis-compras SSR typing. |
+| `platea/app/t/[tenant]/mis-tickets/page.tsx` | Modified | Reused the shared consumibles contract so legacy mis-tickets accepts `venta_item_id` and `resuelto_parcial`. |
+| `platea/components/dashboard/reembolsos-model.ts` | Modified | Added buyer consumible origin, detail typing, and execute action visibility rules. |
+| `platea/components/dashboard/reembolsos-content.tsx` | Modified | Rendered consumible item quantities in review details. |
+| `platea/components/dashboard/reembolsos-content.test.tsx` | Modified | Covered buyer consumible manual execute action visibility. |
+| `sdd/consumibles-buyer-partial-refunds/tasks` | Modified | Marked the implementation tasks complete for this size-exception batch. |
+
+### TDD Cycle Evidence
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 1.1-2.4 | `backend/src/consumibles-buyer-partial-refunds.test.ts` | Integration | ✅ `refund-manual.test.ts`, `tenant-mis-consumibles.test.ts`, `consumibles-canje-flow.test.ts` passing | ✅ Written first | ✅ Passed | ✅ request success + over-request + pending preview + executed preview | ✅ Extracted schema/domain helpers |
+| 3.1-3.4 | `backend/src/consumibles-buyer-partial-refunds.test.ts` + `platea/components/tenant/*.test.tsx` | Integration + Unit | ✅ backend/frontend targeted baselines passing | ✅ Written first | ✅ Passed | ✅ buyer outcome + availability scenarios | ✅ Shared copy helpers |
+| 4.1-4.4 | `platea/components/dashboard/reembolsos-content.test.tsx` | Unit | ✅ dashboard baseline passing | ✅ Written first | ✅ Passed | ✅ company-manual vs buyer-consumible action cases | ✅ Kept model-driven UI branching |
+
+### Test Summary
+- **Total tests written**: 10 new/updated target tests across backend and frontend
+- **Total tests passing**: 36 targeted regression tests passing
+- **Layers used**: Unit (frontend model/copy), Integration (backend routes + DB)
+- **Approval tests**: None — behavior change slice
+- **Pure functions created**: 4 helper functions for refund copy and redeemable-quantity calculations
+
+### Verify Blocker Follow-up
+- Repaired the backend compile blocker in `refund-manual.ts` by removing the stray buyer-consumible execute branch from `approveRefundManualCase()` and keeping buyer consumibles on explicit execute/reject resolution paths only.
+- Added a shared buyer consumibles contract for `mis-compras` and `mis-tickets`, including `venta_item_id`, refund metadata, and `resuelto_parcial` typing.
+- Added runtime proof in `backend/src/consumibles-buyer-partial-refunds.test.ts` that both `rejected` and `resolved_non_refundable` outcomes keep the originally requested quantity redeemable.
+- Added explicit pending-review proof in backend and buyer UI tests so a `requested` consumible refund still renders as manual review and does not reduce redeemable quantity before execution.
+- Added buyer-visible copy coverage for `rejected` and `resolved_non_refundable` consumible outcomes so final non-executed resolutions are explicit instead of being hidden behind generic availability text.
+- Re-verified: `backend` typecheck passes, `src/consumibles-buyer-partial-refunds.test.ts` passes, and targeted frontend type errors for buyer consumibles no longer appear in `platea` typecheck output.
+
+### Deviations from Design
+None — implementation kept the separate buyer overlay, distinct request origin, and `under_review -> executed` manual flow.
+
+### Issues Found
+Frontend `platea` still has unrelated TypeScript failures outside this slice (checkout params, revendedor permissions, tenant-home, proxy/auth, etc.), so only the buyer consumibles contract errors were re-verified here.
+
+### Remaining Tasks
+- [ ] Run verify phase against the full SDD contract
+
+### Workload / PR Boundary
+- Mode: size:exception
+- Current work unit: full buyer partial refund slice
+- Boundary: schema + backend core + tenant/BFF + buyer UI + dashboard review + targeted tests
+- Estimated review budget impact: above 400 lines by design, accepted by maintainer-approved size exception
+
+### Status
+15/15 tasks complete. Verify blockers repaired; ready for re-verify.

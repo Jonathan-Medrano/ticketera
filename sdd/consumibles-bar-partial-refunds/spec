@@ -1,0 +1,59 @@
+# Consumibles Bar Partial Refunds — Slice 1 Delta Spec
+
+## Domain: consumibles-bar-resolution
+
+### Requirement: Resolver QR por producto con estado visible
+El sistema MUST permitir que barra cierre un QR de consumibles resolviendo cada producto pagado como entregado o reembolsado en el momento del escaneo. Cada línea del detalle MUST mostrar una resolución explícita y visible: check verde para entregado y cruz roja para reembolsado. Esta slice MUST NOT ofrecer edición o solicitud de reembolso iniciada por el comprador.
+
+#### Scenario: Ticket mixto resuelto desde barra
+- GIVEN un QR de consumibles pagado con múltiples productos pendientes
+- WHEN barra marca cada línea como entregada o reembolsada y confirma la resolución
+- THEN el ticket queda cerrado con trazabilidad por producto y cantidad
+- AND cada producto conserva su marca final verde o roja
+
+#### Scenario: Todo entregado por shorthand
+- GIVEN un QR con todos los productos disponibles
+- WHEN barra usa la confirmación equivalente a “todo entregado”
+- THEN el ticket se cierra sin líneas reembolsadas
+
+## Domain: consumibles-auto-partial-refunds
+
+### Requirement: Refund automático solo sobre ítems cruzados
+El sistema MUST calcular y ejecutar un refund parcial automático únicamente por el monto asociado a los productos o cantidades marcadas con cruz roja. Los productos marcados con check verde MUST NOT integrar el monto a reembolsar. La operación MUST dejar un caso auditado de origen barra por faltante de stock.
+
+#### Scenario: Refund parcial por faltante
+- GIVEN un ticket cerrado con líneas verdes y rojas
+- WHEN la resolución incluye monto reembolsable por líneas rojas
+- THEN el sistema ejecuta un refund parcial solo por esas líneas
+- AND registra el caso como refund automático por faltante en barra
+
+#### Scenario: Sin refund si no hay cruces
+- GIVEN un ticket cerrado con todas las líneas en verde
+- WHEN se completa la resolución
+- THEN el sistema no crea ni ejecuta ningún refund
+
+## Domain: refunds-operations
+
+### Requirement: Visibilidad operativa de refunds por faltante de barra
+La vista operativa de Reembolsos MUST exponer los refunds automáticos originados por resolución parcial en barra como casos de stock-shortage refunds, diferenciables de los refunds manuales o de otros orígenes.
+
+#### Scenario: Caso visible en Reembolsos
+- GIVEN un refund automático generado por una línea roja en barra
+- WHEN un operador consulta Reembolsos
+- THEN ve el caso identificado como refund automático por faltante de stock
+
+## Domain: consumibles-sales-history
+
+### Requirement: Cierre con trazabilidad entregado vs reembolsado
+El sistema MUST reflejar en el historial interno y en la vista del comprador que el QR fue cerrado con desglose de entregado vs reembolsado. El estado final MUST distinguir cierres parciales de cierres totalmente entregados. Esta slice MUST limitar la experiencia buyer a visibilidad del resultado; el comprador MUST NOT iniciar ni gestionar reembolsos.
+
+#### Scenario: Buyer ve resultado final mixto
+- GIVEN un ticket de consumibles cerrado con líneas verdes y rojas
+- WHEN el comprador consulta su historial o detalle
+- THEN ve qué productos fueron entregados y cuáles reembolsados
+- AND no dispone de acciones self-service de refund
+
+#### Scenario: Trazabilidad de cierre operativo
+- GIVEN un ticket resuelto parcialmente desde barra
+- WHEN un operador consulta ventas o detalle de cierre
+- THEN puede verificar el cierre final con cantidades entregadas y reembolsadas

@@ -1,0 +1,9 @@
+.dev-pg-data/
+node_modules/
+.env
+.env.*
+!.env.example
+.next/
+
+# originales 2x (38 MB): se regeneran con scripts/capturas.mjs
+docs/capturas/

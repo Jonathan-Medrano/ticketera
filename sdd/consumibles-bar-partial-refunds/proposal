@@ -1,0 +1,64 @@
+# Proposal: Consumibles Bar Partial Refunds
+
+## Intent
+
+Permitir que barra cierre un QR de consumibles por item/cantidad al escanear, refundee solo lo no entregado y deje trazabilidad operativa. Hace falta porque hoy el canje es all-or-nothing y no representa tickets mixtos.
+
+## Scope
+
+### In Scope
+- Resolución de canje en scan-time por item/cantidad para ventas de consumibles ya pagadas.
+- Refund automático parcial por items marcados como reembolsados, con caso auditado visible en Reembolsos.
+- Estado persistido y visibilidad interno/buyer de entregado vs reembolsado.
+
+### Out of Scope
+- Solicitudes self-service de refund iniciadas por el comprador.
+- Jobs async/outbox, conciliación avanzada o rediseño general de refunds.
+
+## Capabilities
+
+### New Capabilities
+- `consumibles-bar-resolution`: Cierre de tickets de consumibles desde barra con resolución por item/cantidad y estado final mixto.
+- `consumibles-auto-partial-refunds`: Refund parcial automático de consumibles desde barra con auditoría e idempotencia.
+
+### Modified Capabilities
+- `refunds-operations`: La vista operativa de reembolsos debe incluir casos automáticos originados por barra.
+- `consumibles-sales-history`: Historial interno y buyer deben reflejar tickets parcialmente entregados/reembolsados.
+
+## Approach
+
+Mantener preview y reemplazar la confirmación ciega por `accion: "resolver"`; `confirmar` sigue como shorthand de “todo entregado”. Persistir resolución por cantidad en una tabla itemizada; extender `consumibles_ventas` con montos/fecha de cierre y estado `resuelto_parcial`. Si hay monto a reembolsar, crear y ejecutar en la misma operación un caso `bar_stockout_auto` usando `PaymentRefund.create({ payment_id, body: { amount } })`. No reponer `barra_stock.stock_actual`.
+
+## Affected Areas
+
+| Area | Impact | Description |
+|------|--------|-------------|
+| `backend/src/routes/canjear.ts` | Modified | Nuevo contrato `resolver` y compatibilidad con `confirmar`. |
+| `backend/src/lib/consumibles-redeem.ts` | Modified | Persistencia de resolución + cierre transaccional con refund. |
+| `backend/src/lib/refund-manual.ts` | Modified | Soporte de caso automático consumibles parcial. |
+| `backend/src/routes/ventas.ts` | Modified | Estados mixtos, detalle y métricas parciales. |
+| `backend/src/routes/reembolsos.ts` | Modified | Exponer casos automáticos auditados. |
+| `platea/components/dashboard/*` | Modified | UI de canje, ventas y reembolsos con resolución parcial. |
+| `platea/components/tenant/mis-tickets-content.tsx` | Modified | Desglose buyer entregado vs reembolsado. |
+
+## Risks
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Totales/revenue incorrectos con estado parcial | Med | Ajustar queries y métricas junto con el estado nuevo. |
+| Refund parcial descuadra profit sharing | Med | Reverso proporcional explícito antes de cerrar slice. |
+| Refund duplicado o excedido por payment compartido | High | Idempotency key por caso y control de acumulado refundeado. |
+
+## Rollback Plan
+
+Revertir el endpoint `resolver`, ocultar UI parcial y volver a `confirmar` all-or-nothing; desactivar creación automática de casos `bar_stockout_auto` para que barra no cierre tickets mixtos.
+
+## Dependencies
+
+- Mercado Pago partial refunds vía `PaymentRefund.create`.
+- Migración DB para resolución itemizada y campos de cierre.
+
+## Success Criteria
+
+- [ ] Barra puede cerrar un ticket mixto sin refundear el payment completo ni reponer stock.
+- [ ] Reembolsos, ventas internas y buyer muestran el mismo desglose entregado vs reembolsado.

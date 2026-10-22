@@ -1,0 +1,762 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@custom-variant dark (&:is(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-card-sm: 1.4rem;
+  --radius-card: 1.7rem;
+  --radius-panel: 1.9rem;
+  --radius-panel-lg: 2.3rem;
+}
+
+:root {
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.15 0.02 263);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.02 263);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 263);
+  --primary: oklch(0.452 0.206 263);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.30 0.15 263);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.30 0.15 263);
+  --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.47 0.15 162);
+  --warning: oklch(0.72 0.17 70);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.98 0 0);
+  --ring: oklch(0.452 0.206 263);
+  --radius: 0.75rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.15 0.02 263);
+  --sidebar-primary: oklch(0.452 0.206 263);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.30 0.15 263);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.452 0.206 263);
+  --marketing-bg: #ffffff;
+  --marketing-surface: #ffffff;
+  --marketing-surface-strong: #f8fafc;
+  --marketing-border: rgba(15, 23, 42, 0.08);
+  --marketing-border-strong: rgba(15, 23, 42, 0.14);
+  --marketing-accent: #0052cc;
+  --marketing-accent-soft: rgba(15, 23, 42, 0.04);
+  --marketing-accent-strong: #003e99;
+  --marketing-accent-alt: #f1f5f9;
+  --marketing-ink: #102448;
+  --marketing-ink-strong: #061a3d;
+  --marketing-muted: #6b7280;
+  --marketing-brand: #061a3d;
+  --marketing-avatar-bg: #0052cc;
+  --marketing-action-primary-bg: #0052cc;
+  --marketing-action-primary-hover: #003e99;
+  --marketing-action-primary-text: #ffffff;
+  --marketing-bg-start: #ffffff;
+  --marketing-bg-mid: #ffffff;
+  --marketing-bg-end: #ffffff;
+  --marketing-panel-top: #ffffff;
+  --marketing-panel-bottom: #ffffff;
+  --marketing-hero-overlay: none;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.18 0.01 263);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.18 0.01 263);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.68 0.17 263);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.28 0 0);
+  --secondary-foreground: oklch(0.94 0 0);
+  --muted: oklch(0.22 0.02 263);
+  --muted-foreground: oklch(0.65 0.04 263);
+  --accent: oklch(0.32 0 0);
+  --accent-foreground: oklch(0.94 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.79 0.14 162);
+  --warning: oklch(0.80 0.16 70);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.68 0.17 263);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.18 0.01 263);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.68 0.17 263);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.32 0 0);
+  --sidebar-accent-foreground: oklch(0.94 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.68 0.17 263);
+  --marketing-bg: #08111d;
+  --marketing-bg: #0c1320;
+  --marketing-surface: #0c1320;
+  --marketing-surface-strong: #0c1320;
+  --marketing-border: rgba(255, 255, 255, 0.08);
+  --marketing-border-strong: rgba(255, 255, 255, 0.16);
+  --marketing-accent: #68a1ff;
+  --marketing-accent-soft: rgba(104, 161, 255, 0.08);
+  --marketing-accent-strong: #4d8aff;
+  --marketing-accent-alt: #ffd6c0;
+  --marketing-ink: #e0e7fb;
+  --marketing-ink-strong: #f3f6ff;
+  --marketing-muted: #94a3b8;
+  --marketing-brand: #c8d6ff;
+  --marketing-avatar-bg: #68a1ff;
+  --marketing-action-primary-bg: #68a1ff;
+  --marketing-action-primary-hover: #4d8aff;
+  --marketing-action-primary-text: #08111d;
+  --marketing-bg-start: #0c1320;
+  --marketing-bg-mid: #0c1320;
+  --marketing-bg-end: #0c1320;
+  --marketing-panel-top: #131a28;
+  --marketing-panel-bottom: #131a28;
+  --marketing-hero-overlay: none;
+}
+
+[data-layout="dashboard"] {
+  --background: oklch(0.985 0 0);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --secondary: oklch(0.955 0 0);
+  --muted: oklch(0.96 0 0);
+  --accent: oklch(0.945 0 0);
+  --border: oklch(0.87 0 0);
+  --input: oklch(0.98 0 0);
+  --sidebar: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.945 0 0);
+  --sidebar-border: oklch(0.87 0 0);
+}
+
+.dark [data-layout="dashboard"],
+[data-layout="dashboard"].dark {
+  --background: oklch(0.145 0 0) !important;
+  --card: oklch(0.18 0.01 263) !important;
+  --popover: oklch(0.18 0.01 263) !important;
+  --secondary: oklch(0.26 0 0) !important;
+  --secondary-foreground: oklch(0.96 0 0) !important;
+  --muted: oklch(0.22 0 0) !important;
+  --muted-foreground: oklch(0.65 0.04 263) !important;
+  --accent: oklch(0.28 0 0) !important;
+  --accent-foreground: oklch(0.96 0 0) !important;
+  --border: oklch(1 0 0 / 10%) !important;
+  --input: oklch(1 0 0 / 12%) !important;
+  --sidebar: oklch(0.18 0.01 263) !important;
+  --sidebar-accent: oklch(0.28 0 0) !important;
+  --sidebar-accent-foreground: oklch(0.96 0 0) !important;
+  --sidebar-border: oklch(1 0 0 / 10%) !important;
+}
+
+:root:not(.dark) [data-slot="dialog-content"],
+:root:not(.dark) [data-slot="dialog-overlay"],
+:root:not(.dark) [data-slot="popover-content"],
+:root:not(.dark) [data-slot="dropdown-menu-content"],
+:root:not(.dark) [data-slot="select-content"],
+:root:not(.dark) [data-slot="command"],
+:root:not(.dark) [data-slot="sheet-content"] {
+  --background: oklch(1 0 0) !important;
+  --card: oklch(1 0 0) !important;
+  --popover: oklch(1 0 0) !important;
+  --secondary: oklch(0.96 0 0) !important;
+  --muted: oklch(0.96 0 0) !important;
+  --accent: oklch(0.94 0 0) !important;
+  --border: oklch(0.88 0 0) !important;
+  --input: oklch(0.985 0 0) !important;
+}
+
+.dark [data-slot="dialog-content"],
+.dark [data-slot="dialog-overlay"],
+.dark [data-slot="popover-content"],
+.dark [data-slot="dropdown-menu-content"],
+.dark [data-slot="select-content"],
+.dark [data-slot="command"],
+.dark [data-slot="sheet-content"] {
+  --background: oklch(0.18 0.01 263) !important;
+  --card: oklch(0.18 0.01 263) !important;
+  --popover: oklch(0.18 0.01 263) !important;
+  --secondary: oklch(0.26 0 0) !important;
+  --muted: oklch(0.22 0 0) !important;
+  --accent: oklch(0.28 0 0) !important;
+  --border: oklch(1 0 0 / 10%) !important;
+  --input: oklch(1 0 0 / 12%) !important;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+    scrollbar-gutter: stable;
+    scroll-behavior: smooth;
+  }
+
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
+    --removed-body-scroll-bar-size: 0px !important;
+    overflow: hidden !important;
+  }
+
+  :target {
+    scroll-margin-top: 5rem;
+  }
+
+  html:has([data-layout="dashboard"]) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+
+  /* Chrome/Safari autofill: por default pintan amarillo el fondo del input.
+     Forzamos el color heredado del input mismo (`inherit`) — así matchea cualquier
+     contexto: dashboard light/dark, tenant light/dark, etc. Antes usábamos
+     var(--foreground) hardcoded, lo que rompía en tenants donde el color del
+     texto es distinto al del sistema.
+
+     Para el fondo usamos una variable --input-autofill-bg que cualquier componente
+     puede overrideear (default = var(--background)). El truco del 1000px inset
+     shadow es para pintar encima del amarillo del browser. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  textarea:-webkit-autofill:active,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus,
+  select:-webkit-autofill:active {
+    -webkit-text-fill-color: inherit;
+    -webkit-box-shadow: 0 0 0 1000px var(--input-autofill-bg, var(--tenant-fondo, var(--background))) inset;
+    transition: background-color 5000s ease-in-out 0s;
+    caret-color: inherit;
+  }
+
+  /* Tenant: la regla global de arriba NO logra enmascarar el autofill en los inputs
+     del tenant (son <input> con estilos inline; el box-shadow no gana). Forzamos acá
+     con selector de clase (.tenant-field) + !important, usando las CSS vars reactivas
+     del tema del tenant (--tenant-fondo/--tenant-texto cambian con el toggle
+     claro/oscuro). color-mix replica el overlay translúcido del input. */
+  input.tenant-field:-webkit-autofill,
+  input.tenant-field:-webkit-autofill:hover,
+  input.tenant-field:-webkit-autofill:focus,
+  input.tenant-field:-webkit-autofill:active,
+  textarea.tenant-field:-webkit-autofill,
+  textarea.tenant-field:-webkit-autofill:hover,
+  textarea.tenant-field:-webkit-autofill:focus,
+  textarea.tenant-field:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px color-mix(in srgb, var(--tenant-texto, #f8fafc) 12%, var(--tenant-fondo, #061a3d)) inset !important;
+    -webkit-text-fill-color: var(--tenant-texto, #f8fafc) !important;
+    caret-color: var(--tenant-texto, #f8fafc) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  #qr-reader {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: #000;
+  }
+
+  #qr-reader video,
+  #qr-reader canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  #qr-reader__scan_region,
+  #qr-reader__scan_region img {
+    display: none !important;
+  }
+
+  #qr-reader > div {
+    width: 100%;
+    height: 100%;
+  }
+
+  .marketing-shell {
+    background: var(--marketing-bg);
+    color: var(--marketing-ink);
+    /* Las animaciones de scroll-reveal (framer-motion) trasladan ±28px en X a los
+       elementos aún no revelados; sin este guard ensanchan el documento y generan
+       scroll horizontal en pantallas angostas (≤320px). `clip` recorta solo el eje X
+       y conserva overflow-y: visible, así NO crea scroll-container ni rompe el
+       navbar sticky (a diferencia de overflow-x: hidden). */
+    overflow-x: clip;
+  }
+
+  .marketing-panel {
+    border: 1px solid var(--marketing-border);
+    background: var(--marketing-panel-top);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .marketing-kicker {
+    color: var(--marketing-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+
+  .marketing-title {
+    font-family: var(--font-display), var(--font-sans);
+    color: var(--marketing-ink-strong);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+  }
+
+  /* Frase acentuada dentro de un titular editorial: el contraste lo da el
+     color de marca (azul TICKETERA), no un serif-italic. */
+  .marketing-title-accent {
+    color: var(--marketing-accent);
+  }
+
+  .marketing-hero-title {
+    font-size: 1.95rem;
+    line-height: 0.98;
+    letter-spacing: -0.045em;
+  }
+  @media (min-width: 375px) {
+    .marketing-hero-title {
+      font-size: 2.4rem;
+      line-height: 0.92;
+      letter-spacing: -0.05em;
+    }
+  }
+  @media (min-width: 640px) {
+    .marketing-hero-title {
+      font-size: 3.5rem;
+      line-height: 0.9;
+    }
+  }
+  @media (min-width: 768px) {
+    .marketing-hero-title {
+      font-size: 4.6rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .marketing-hero-title {
+      font-size: 5.6rem;
+    }
+  }
+
+  .marketing-section-title {
+    font-size: 1.65rem;
+    line-height: 1.25;
+  }
+  @media (min-width: 375px) {
+    .marketing-section-title {
+      font-size: 2rem;
+    }
+  }
+  @media (min-width: 640px) {
+    .marketing-section-title {
+      font-size: 2.8rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .marketing-section-title {
+      font-size: 3.6rem;
+    }
+  }
+
+  .marketing-page-title {
+    font-size: 1.9rem;
+    line-height: 1.15;
+  }
+  @media (min-width: 640px) {
+    .marketing-page-title {
+      font-size: 2.6rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .marketing-page-title {
+      font-size: 3.2rem;
+    }
+  }
+
+  .marketing-panel-title {
+    font-size: 1.5rem;
+    line-height: 1.25;
+  }
+  @media (min-width: 1024px) {
+    .marketing-panel-title {
+      font-size: 1.875rem;
+    }
+  }
+
+  .marketing-lead {
+    font-size: 1.125rem;
+    line-height: 2rem;
+  }
+  @media (min-width: 640px) {
+    .marketing-lead {
+      font-size: 1.25rem;
+    }
+  }
+
+  .marketing-section-lead {
+    font-size: 1rem;
+    line-height: 2rem;
+  }
+  @media (min-width: 640px) {
+    .marketing-section-lead {
+      font-size: 1.125rem;
+    }
+  }
+
+  .marketing-card-body {
+    font-size: 0.875rem;
+    line-height: 1.75rem;
+  }
+
+  .marketing-page-body {
+    font-size: 0.875rem;
+    line-height: 1.75rem;
+  }
+  @media (min-width: 640px) {
+    .marketing-page-body {
+      font-size: 1rem;
+    }
+  }
+
+  .marketing-noise {
+    display: none;
+  }
+
+  .marketing-brand-wordmark {
+    color: var(--marketing-accent);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1;
+  }
+
+  .marketing-brand-wordmark span {
+    color: var(--marketing-ink-strong);
+    font-weight: 400;
+  }
+
+  .super-admin-shell,
+  .super-admin-theme-scope {
+    --background: oklch(0.985 0 0);
+    --foreground: oklch(0.24 0.03 263);
+    --card: rgba(255, 255, 255, 0.98);
+    --card-foreground: oklch(0.24 0.03 263);
+    --popover: rgba(255, 255, 255, 0.98);
+    --popover-foreground: oklch(0.22 0.03 263);
+    --primary: oklch(0.452 0.206 263);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.96 0 0);
+    --secondary-foreground: oklch(0.30 0.15 263);
+    --muted: oklch(0.96 0 0);
+    --muted-foreground: oklch(0.5 0 0);
+    --accent: oklch(0.94 0.012 263);
+    --accent-foreground: oklch(0.30 0.15 263);
+    --border: oklch(0.9 0 0);
+    --input: rgba(255, 255, 255, 0.98);
+    --ring: oklch(0.452 0.206 263);
+    --destructive: oklch(0.63 0.18 25);
+    --success: oklch(0.47 0.15 162);
+    --warning: oklch(0.72 0.17 70);
+    --superadmin-shell-gradient:
+      radial-gradient(circle at top left, rgba(0, 82, 204, 0.08), transparent 26%),
+      radial-gradient(circle at bottom right, rgba(0, 82, 204, 0.04), transparent 38%),
+      linear-gradient(180deg, #ffffff 0%, #f8fafc 52%, #f1f5f9 100%);
+    --superadmin-panel-shadow: 0 20px 44px rgba(15, 23, 42, 0.06);
+    --superadmin-soft-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    --superadmin-accent-shadow: 0 18px 42px rgba(0, 82, 204, 0.18);
+    --superadmin-panel-strong: rgba(255, 255, 255, 0.96);
+    --superadmin-chart-grid: rgba(148, 163, 184, 0.18);
+    --superadmin-sidebar-bg: #061a3d;
+    --superadmin-sidebar-border: rgba(255, 255, 255, 0.08);
+    --superadmin-sidebar-panel: rgba(255, 255, 255, 0.05);
+    --superadmin-sidebar-muted: rgba(226, 232, 240, 0.68);
+    --superadmin-topbar-bg: rgba(255, 255, 255, 0.85);
+    --superadmin-topbar-border: rgba(148, 163, 184, 0.18);
+    /* Dense table utilities for super-admin */
+    --sa-table-row-h: 36px;
+    --sa-table-cell-px: 12px;
+    --sa-table-cell-py: 6px;
+    color-scheme: light;
+  }
+
+  [data-superadmin-theme="light"] .super-admin-shell,
+  .super-admin-theme-scope[data-superadmin-theme="light"] {
+    --card: rgba(255, 255, 255, 0.98);
+    --popover: rgba(255, 255, 255, 0.98);
+    --superadmin-shell-gradient:
+      radial-gradient(circle at top left, rgba(0, 82, 204, 0.08), transparent 26%),
+      radial-gradient(circle at bottom right, rgba(0, 82, 204, 0.04), transparent 38%),
+      linear-gradient(180deg, #ffffff 0%, #f8fafc 52%, #f1f5f9 100%);
+    --background: #f8fafc;
+    --card: #ffffff;
+    --border: rgba(0, 0, 0, 0.09);
+    --muted: #f1f5f9;
+    --muted-foreground: oklch(0.52 0.012 263);
+    color-scheme: light;
+  }
+
+  [data-superadmin-theme="dark"] .super-admin-shell,
+  .super-admin-theme-scope[data-superadmin-theme="dark"] {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.18 0.01 263);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.18 0.01 263);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.68 0.17 263);
+    --primary-foreground: oklch(1 0 0);
+    --ring: oklch(0.68 0.17 263);
+    --secondary: oklch(0.26 0 0);
+    --secondary-foreground: oklch(0.96 0 0);
+    --muted: oklch(0.22 0 0);
+    --muted-foreground: oklch(0.65 0.04 263);
+    --accent: oklch(0.28 0 0);
+    --accent-foreground: oklch(0.96 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 12%);
+    --destructive: oklch(0.704 0.191 22.216);
+    --success: oklch(0.79 0.14 162);
+    --warning: oklch(0.80 0.16 70);
+    --superadmin-shell-gradient:
+      radial-gradient(ellipse 70% 32% at 50% 0%, rgba(59, 130, 246, 0.06), transparent),
+      linear-gradient(180deg, oklch(0.145 0.005 263) 0%, oklch(0.135 0.004 263) 100%);
+    --superadmin-panel-shadow: 0 22px 48px rgba(2, 6, 23, 0.28);
+    --superadmin-soft-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
+    --superadmin-accent-shadow: 0 18px 42px rgba(59, 130, 246, 0.22);
+    --superadmin-chart-grid: rgba(148, 163, 184, 0.14);
+    --superadmin-topbar-bg: rgba(15, 23, 42, 0.82);
+    --superadmin-topbar-border: rgba(148, 163, 184, 0.12);
+    /* --- Override global shadcn tokens so components see dark values --- */
+    --background: oklch(0.13 0.004 263);
+    --foreground: oklch(0.93 0.008 263);
+    --card: oklch(0.175 0.008 263);
+    --card-foreground: oklch(0.93 0.008 263);
+    --popover: oklch(0.175 0.008 263);
+    --popover-foreground: oklch(0.93 0.008 263);
+    --border: rgba(255, 255, 255, 0.09);
+    --input: oklch(0.155 0.006 263);
+    --muted: oklch(0.20 0.008 263);
+    --muted-foreground: oklch(0.60 0.012 263);
+    --ring: oklch(0.68 0.17 263 / 50%);
+    --secondary: oklch(0.235 0.009 263);
+    --secondary-foreground: oklch(0.90 0.006 263);
+    --accent: oklch(0.265 0.009 263);
+    --accent-foreground: oklch(0.92 0.006 263);
+    color-scheme: dark;
+  }
+
+  .superadmin-row-card {
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+  }
+
+  .superadmin-row-card:hover {
+    background: color-mix(in srgb, var(--accent) 18%, var(--card));
+  }
+
+  [data-superadmin-theme="light"] .superadmin-row-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 255, 0.98) 100%);
+  }
+
+  [data-superadmin-theme="light"] .superadmin-row-card:hover {
+    background: linear-gradient(180deg, rgba(240, 245, 255, 0.98) 0%, rgba(235, 242, 255, 0.98) 100%);
+  }
+
+  .superadmin-modal-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--primary) 55%, transparent) transparent;
+  }
+
+  .superadmin-modal-scroll::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .superadmin-modal-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .superadmin-modal-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--primary) 48%, rgba(255, 255, 255, 0.12));
+  }
+
+  .super-admin-shell .overflow-x-auto {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+  }
+
+  .super-admin-shell .overflow-x-auto::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .super-admin-shell .overflow-x-auto::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .super-admin-shell .overflow-x-auto::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+  }
+
+  .announcement-marquee-viewport {
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  .announcement-marquee-track {
+    display: inline-flex;
+    align-items: center;
+    will-change: transform;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  .announcement-marquee-track-infinite {
+    animation-name: announcement-marquee-infinite;
+  }
+
+  .announcement-marquee-track-finite {
+    animation-name: announcement-marquee-finite;
+  }
+
+  .announcement-marquee-viewport:hover .announcement-marquee-track {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes announcement-marquee-infinite {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes announcement-marquee-finite {
+  0% { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes qr-scanline {
+  0% { top: 8%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 90%; opacity: 0; }
+}
+
+/* Super-admin dense table styles */
+.super-admin-shell table th,
+.super-admin-shell [role="columnheader"] {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  padding: 6px 12px;
+}
+
+.super-admin-shell table td,
+.super-admin-shell [role="cell"] {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.super-admin-shell table tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.super-admin-shell .font-mono,
+.super-admin-shell [data-numeric="true"] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+@keyframes scanner-line-y {
+  0%, 100% { top: 8%; }
+  50% { top: 88%; }
+}
+
+.scanner-line {
+  animation: scanner-line-y 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-marquee-track {
+    animation: none !important;
+    transform: none !important;
+  }
+  .scanner-line {
+    display: none;
+  }
+}

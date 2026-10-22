@@ -1,0 +1,77 @@
+# Design: consumibles-bar-partial-refunds
+
+## Technical Approach
+
+Primer slice: reemplazar el cierre all-or-nothing del QR de consumibles por una resolución itemizada en scan-time. La barra sigue haciendo preview por código, pero el cierre persiste cantidades entregadas vs reembolsadas, ejecuta refund parcial automático en Mercado Pago por el monto exacto, deja el ticket cerrado y publica la trazabilidad en ventas buyer/internas y Reembolsos.
+
+## Architecture Decisions
+
+| Decision | Options | Choice / Rationale |
+|---|---|---|
+| Modelo de resolución | Reusar `estado` actual vs tabla itemizada | Nueva tabla `consumibles_venta_resolucion_items`; `consumibles_venta_items` agrupa cantidades y no puede modelar entrega parcial por cantidad. |
+| Momento del refund | Async/outbox vs síncrono en cierre | Síncrono en `resolverConsumiblesRedeem()`. Si MP falla, rollback y el QR sigue `pendiente`; es más seguro que cerrar ticket sin dinero devuelto. |
+| Refund API MP | `PaymentRefund.total()` vs parcial por amount | `PaymentRefund.create({ payment_id, body: { amount } })` con idempotency key por caso; evita refund total accidental cuando un checkout genera varias `consumibles_ventas`. |
+| Reverso interno | Cancelación completa existente vs reverso proporcional | Nuevo reverso proporcional de platform allocations; `cancelPendingConsumableSale()` repone stock y cancela todo, así que NO sirve para faltante en barra. |
+| Tratamiento de stock | Reponer `barra_stock` vs no tocar | No tocar `barra_stock.stock_actual`; la verdad operativa ya fue descontada en checkout y el refund por faltante no debe inventar stock. |
+
+## Data Flow
+
+`platea/components/dashboard/consumibles-canjear-content.tsx`
+→ `POST /api/consumibles/canjear { accion: "resolver" }`
+→ `backend/src/routes/canjear.ts`
+→ `resolveConsumiblesRedeem()` en `backend/src/lib/consumibles-redeem.ts`
+→ lock `consumibles_ventas` + items + checkout session/payment
+→ persistir resolución itemizada
+→ si `refunded_amount > 0`, crear `refund_manual_cases` (`request_origin='bar_stockout_auto'`) + ejecutar MP refund parcial
+→ reversar profit sharing proporcional
+→ cerrar venta con snapshot monetario final
+→ responder ticket cerrado para UI interna/buyer.
+
+## File Changes
+
+| File | Action | Description |
+|---|---|---|
+| `backend/src/lib/backend-schema.ts` | Modify | Agregar columnas de cierre en `consumibles_ventas`, nueva tabla `consumibles_venta_resolucion_items`, y ampliar `refund_manual_cases.request_origin`. |
+| `backend/src/lib/consumibles-redeem.ts` | Modify | Reemplazar `confirmConsumiblesRedeem()` por resolución itemizada, refund automático parcial y auditoría de cierre. |
+| `backend/src/routes/canjear.ts` | Modify | Aceptar `accion: resolver` con payload por item; mantener `confirmar` como shorthand de “todo entregado”. |
+| `backend/src/lib/refund-manual.ts` | Modify | Soportar caso automático de consumibles, ejecución parcial por amount y contexto/labels para Reembolsos. |
+| `backend/src/lib/platform-profit-sharing.ts` | Modify | Crear helper de reverso proporcional por `source_id` para consumibles parcialmente refundados. |
+| `backend/src/routes/tenant.ts` | Modify | Exponer resolución/cierre en `mis-consumibles`. |
+| `backend/src/routes/ventas.ts` | Modify | Incluir nuevo estado mixto, montos entregados/reembolsados y stats corregidas. |
+| `platea/components/dashboard/consumibles-canjear-content.tsx` | Modify | UI de resolución por item/cantidad y confirmación de refund por faltante. |
+| `platea/components/dashboard/consumibles-ventas-content.tsx` | Modify | Mostrar ticket mixto y desglose monetario. |
+| `platea/components/dashboard/reembolsos-model.ts` / `reembolsos-content.tsx` | Modify | Etiqueta “Reembolso por falta de stock” para `bar_stockout_auto`. |
+| `platea/components/tenant/mis-tickets-content.tsx` | Modify | Mostrar QR cerrado con entregado vs reembolsado. |
+
+## Interfaces / Contracts
+
+```ts
+type ConsumibleResolutionInput = {
+  venta_item_id: string
+  cantidad_entregada: number
+  cantidad_reembolsada: number
+  resolution_reason?: 'stock_shortage'
+}
+
+POST /api/consumibles/canjear
+{ accion: 'resolver', venta_id: string, barra_id: string, items: ConsumibleResolutionInput[] }
+```
+
+Persistencia nueva en `consumibles_ventas`: `estado` admite `resuelto_parcial`; agregar `resuelto_at`, `delivered_amount`, `refunded_amount`, `refund_case_id`. La suma entregada+reembolsada por línea DEBE igualar `cantidad`.
+
+## Testing Strategy
+
+| Layer | What to Test | Approach |
+|---|---|---|
+| Unit | Validación de cantidades, cálculo de montos, idempotency key, reverso proporcional | Tests en `consumibles-redeem` / `platform-profit-sharing`. |
+| Integration | Resolver total, parcial y 100% refund; rollback si MP falla; visibilidad en Reembolsos y `mis-consumibles` | Nuevos tests backend sobre rutas `canjear`, `reembolsos`, `tenant`. |
+| E2E | Flujo scan → resolución parcial → ticket cerrado visible | Test UI dashboard + buyer leyendo payload nuevo. |
+
+## Migration / Rollout
+
+Sin migración destructiva. `ensureBackendSchema()` agrega columnas/tablas lazily. Rollout único del slice: backend y vistas consumidoras deben salir juntos para no dejar `resuelto_parcial` sin representación.
+
+## Open Questions
+
+- [ ] Confirmar si `refund_manual_case_items` debe recibir también un item sintético por resolución parcial o si alcanza con `refund_case_id` en `consumibles_ventas`.
+- [ ] Definir si `resuelto_parcial` entra en filtros UX como “Usada” o requiere badge separado en dashboard/buyer.

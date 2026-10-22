@@ -1,0 +1,52 @@
+# Tasks: Consumibles Buyer Partial Refunds
+
+## Review Workload Forecast
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | 520-760 |
+| 400-line budget risk | High |
+| Chained PRs recommended | Yes |
+| Suggested split | PR 1 backend schema+refund core -> PR 2 tenant/BFF buyer flow -> PR 3 dashboard/UI/tests |
+| Delivery strategy | ask-on-risk |
+| Chain strategy | pending |
+
+Decision needed before apply: Yes
+Chained PRs recommended: Yes
+Chain strategy: pending
+400-line budget risk: High
+
+### Suggested Work Units
+
+| Unit | Goal | Likely PR | Notes |
+|------|------|-----------|-------|
+| 1 | Persist refund items and redeem overlay | PR 1 | Base slice; backend schema, refund-manual, redeem integration tests |
+| 2 | Expose buyer contract end-to-end | PR 2 | Depends on PR 1; tenant route, BFF proxy, buyer UI contract |
+| 3 | Enable Reembolsos review UX and UI regression coverage | PR 3 | Depends on PR 2; dashboard detail/actions and component tests |
+
+## Phase 1: Foundation
+
+- [x] 1.1 Modify `backend/src/lib/backend-schema.ts` to add buyer consumible refund item tables, item events, and indexes by `case_id`, `venta_id`, `venta_item_id`, and `status`.
+- [x] 1.2 Extend `backend/src/lib/refund-manual.ts` types/constants for `request_origin='buyer_consumible_request'`, itemized statuses, and amount snapshots per `venta_item_id`.
+- [x] 1.3 Add backend tests for item eligibility validation and over-request rejection covering spec scenarios `Buyer submits partial refund` and `Buyer exceeds remaining quantity`.
+
+## Phase 2: Refund Core and Redeem Overlay
+
+- [x] 2.1 Implement `createBuyerConsumibleRefundRequest()` and case-item persistence in `backend/src/lib/refund-manual.ts`, keeping `refund_manual_cases` as control plane.
+- [x] 2.2 Implement partial execute/reject resolution in `backend/src/lib/refund-manual.ts`, including sale status recalculation for fully refunded vs partially redeemable consumibles.
+- [x] 2.3 Update `backend/src/lib/consumibles-redeem.ts` so preview/resolve subtract only `executed` buyer refund quantities and ignore `requested`/`under_review`.
+- [x] 2.4 Add integration tests around `refund-manual.ts` and `consumibles-redeem.ts` for executed partial refund, pending review no-op, and remaining QR redemption.
+
+## Phase 3: Tenant and Buyer Flow
+
+- [x] 3.1 Modify `backend/src/routes/tenant.ts` to enrich `GET /mis-consumibles` with `eligible_quantity`, existing request state, executed quantity, and rejected quantity per item.
+- [x] 3.2 Add `platea/app/api/tenant/[slug]/consumibles-refund-requests/route.ts` as the dedicated buyer proxy contract.
+- [x] 3.3 Update `platea/components/tenant/mis-consumibles-content.tsx` with CTA, per-item quantity selection, submit handling, and visible states `requested`, `under_review`, `executed`, `rejected`, and `resolved_non_refundable`.
+- [x] 3.4 Update `platea/components/tenant/mis-tickets-content.tsx` to reuse or mirror the `mis-consumibles` refund state contract so legacy consumibles copy does not diverge.
+
+## Phase 4: Dashboard Review and Verification
+
+- [x] 4.1 Modify `platea/components/dashboard/reembolsos-model.ts` to include consumible buyer item detail, quantities, snapshots, and review actions.
+- [x] 4.2 Modify `platea/components/dashboard/reembolsos-content.tsx` to review, execute, and reject consumible buyer requests by item/quantity without treating them as `bar_stockout_auto`.
+- [x] 4.3 Add UI tests for buyer states in `mis-consumibles`/`mis-tickets` and dashboard review flows matching spec outcomes `executed`, `rejected`, and `resolved_non_refundable`.
+- [x] 4.4 Resolve the open design question on intermediate approval state before apply; if no new state is approved, keep buyer-visible progression `under_review -> executed` only.

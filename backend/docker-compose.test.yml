@@ -1,0 +1,23 @@
+services:
+  # ── Postgres test container (Wave C+) ────────────────────────────────────
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: platea-backend-postgres-test
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ticketera_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ticketera_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-test-data:

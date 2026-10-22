@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.log
+
+# Datos efímeros del Postgres local (embedded-pg-runner.mjs) — NUNCA commitear
+.embedded-pg-data*/

@@ -1,0 +1,61 @@
+## Exploration: consumibles-bar-partial-refunds
+
+### Current State
+- El canje de consumibles hoy es **preview + confirmación all-or-nothing**. `backend/src/routes/canjear.ts` solo soporta preview por `codigo` y confirmación por `venta_id`; `backend/src/lib/consumibles-redeem.ts` pasa `consumibles_ventas.estado` de `pendiente` a `canjeado` sin resolución por item.
+- La venta pública descuenta stock en checkout, no en canje. `backend/src/routes/tenant.ts` baja `barra_stock.stock_actual` al reservar/confirmar compra y materializa una o más `consumibles_ventas` agrupadas por barra.
+- El modelo de ticket de consumibles es grueso: `consumibles_ventas` solo distingue `pendiente | canjeado | cancelado` y `consumibles_venta_items` guarda cantidad agregada por producto, sin delivered/refunded por item.
+- El historial interno y buyer leen solo ese estado grueso. `backend/src/routes/ventas.ts`, `platea/components/dashboard/consumibles-ventas-content.tsx` y `platea/components/tenant/mis-tickets-content.tsx` no pueden representar un ticket mixto.
+- Reembolsos ya existe, pero para consumibles hoy está bloqueado para ejecución real: `backend/src/lib/refund-manual.ts` devuelve `Los consumibles deben resolverse como no reembolsables en este MVP` al aprobar/ejecutar casos de flujo `consumibles`.
+- La ejecución automática actual usa `PaymentRefund.total()` para refunds completos. Según SDK actual de Mercado Pago, el refund parcial correcto es `PaymentRefund.create({ payment_id, body: { amount } })`; usar `total()` sería inseguro porque un `checkout_session` puede materializar varias `consumibles_ventas`.
+- `cancelPendingConsumableSale()` cancela una venta pendiente completa, repone stock y revierte profit sharing completo. Eso sirve para cancelación total antes del canje, pero NO para un refund parcial originado en barra.
+
+### Affected Areas
+- `backend/src/lib/consumibles-redeem.ts` — hoy resuelve canje completo; debe pasar a resolución por item con cierre final del QR.
+- `backend/src/routes/canjear.ts` — contrato API actual solo acepta preview y `accion: confirmar`.
+- `backend/src/routes/tenant.ts` — materializa ventas buyer y expone `mis-consumibles`; hay que devolver estado/resolución persistida.
+- `backend/src/routes/ventas.ts` — listado, detalle, filtros y stats hoy asumen estado simple y revenue no parcial.
+- `backend/src/lib/refund-manual.ts` — modelo base de casos/eventos; hoy bloquea consumibles y solo ejecuta refunds completos.
+- `backend/src/routes/reembolsos.ts` — la UI de Reembolsos depende de este dominio; hay que hacer visibles los casos automáticos de barra.
+- `backend/src/lib/platform-profit-sharing.ts` — hoy solo revierte allocations completos por venta, no parciales.
+- `platea/components/dashboard/consumibles-canjear-content.tsx` — modal actual solo permite “Completar canje”.
+- `platea/components/dashboard/consumibles-ventas-content.tsx` — debe mostrar estado parcial y detalle delivered vs refunded.
+- `platea/components/dashboard/reembolsos-content.tsx`
+- `platea/components/dashboard/reembolsos-model.ts` — deben etiquetar origen/motivo automático tipo “Reembolso por falta de stock”.
+- `platea/components/tenant/mis-tickets-content.tsx` — buyer debe ver ticket cerrado con desglose entregado vs reembolsado.
+
+### Approaches
+1. **Reusar cancelación/manual refund existente por venta completa** — bar scan crea/cierra casos con el modelo actual y cancela la venta entera.
+   - Pros: reaprovecha rutas y tablas ya existentes.
+   - Cons: NO soporta ticket mixto; repone stock indebidamente; `refund-manual` hoy bloquea consumibles; `PaymentRefund.total()` puede refundear de más; no preserva delivered vs refunded.
+   - Effort: Medium
+
+2. **Agregar capa de resolución de canje + caso automático de refund parcial** — el scan sigue teniendo preview, pero el cierre persiste resolución por item/cantidad y solo crea refund si hay items marcados como refund.
+   - Pros: modela correctamente entrega mixta; mantiene QR cerrado con trazabilidad; permite refund exacto; evita tocar stock al refundear por falta de stock; deja Reembolsos como vista operativa existente.
+   - Cons: requiere nuevo modelo de resolución, un nuevo estado parcial y tocar reporting/UX en varias pantallas.
+   - Effort: High
+
+### Recommendation
+Recomiendo **Approach 2**.
+
+Arquitectura más segura para este primer slice:
+- Mantener `previewConsumiblesRedeem()` y reemplazar la confirmación ciega por una resolución explícita, por ejemplo `accion: "resolver"`, dejando `accion: "confirmar"` como shorthand backward-compatible para “todo entregado”.
+- Agregar una tabla de resolución itemizada, por ejemplo `consumibles_venta_resolucion_items`, con `venta_id`, `venta_item_id`, `cantidad_entregada`, `cantidad_reembolsada`, `monto_entregado`, `monto_reembolsado`, `resolution_reason`, `actor_id`, `actor_type`, timestamps. IMPORTANTE: como `consumibles_venta_items` guarda cantidades agregadas, la persistencia debe soportar cantidades; no alcanza con un booleano por fila si una línea tiene `cantidad > 1`.
+- Extender `consumibles_ventas` con campos de cierre (`resuelto_at`, `delivered_amount`, `refunded_amount`) y un estado nuevo para mixtos, por ejemplo `resuelto_parcial`. Mantener:
+  - `canjeado` = todo entregado
+  - `cancelado` = todo refundeado
+  - `resuelto_parcial` = parte entregada / parte refundeada
+- NO restaurar `barra_stock.stock_actual` en este flujo. El stock ya se descontó en checkout y el requerimiento dice que barra puede marcar refund aunque el sistema diga otra cosa; reponer stock automáticamente haría mentir más a la fuente operativa.
+- Cuando `refunded_amount > 0`, crear y ejecutar en la misma operación un caso de `refund_manual_cases` con nuevo `request_origin` tipo `bar_stockout_auto` y motivo visible `Reembolso por falta de stock`. Ese caso debe nacer ya ejecutado, con evento auditado y referencia al `venta_id`.
+- Para Mercado Pago, usar SIEMPRE `PaymentRefund.create({ payment_id, body: { amount } })` con idempotency key por caso automático. Incluso si el ticket queda 100% refundeado, esto evita refundear accidentalmente todo el payment cuando hay más de una venta colgando del mismo `checkout_session`.
+- Hacer la resolución y el refund automático en una única operación síncrona para este slice. Si Mercado Pago falla, se hace rollback y el QR queda `pendiente`; es menos elegante que un outbox, pero MÁS SEGURO para no cerrar tickets sin dinero devuelto.
+- Dejar explícitamente fuera de alcance el flujo buyer self-service para consumibles; solo mencionar future scope.
+
+### Risks
+- `backend/src/routes/ventas.ts` hoy calcula stats/revenue asumiendo tickets completos; un estado parcial va a exigir ajustar sumatorias o los totales mentirán.
+- `platform-profit-sharing` solo sabe revertir allocations completos; un refund parcial de consumibles necesita reverso proporcional o quedará descuadrado el ledger.
+- El SDK actual soporta refund parcial, pero múltiples partial refunds sobre el mismo payment exigen idempotency y control de acumulado refundeado por `payment_id`.
+- Si se modela resolución binaria por fila y no por cantidad, tickets con `cantidad > 1` quedan mal representados.
+- La UI de buyer e interno hoy usa estado simple; si no se actualiza en conjunto, el ticket puede cerrarse bien en backend pero verse ambiguo en frontend.
+
+### Ready for Proposal
+Yes — si la propuesta se limita a: resolución de barra en scan-time, refund automático parcial solo para consumibles buyer ya pagados, visibilidad en Reembolsos y cierre persistido del ticket. El flujo de solicitud de refund por parte del comprador para consumibles debe quedar solo como scope futuro.

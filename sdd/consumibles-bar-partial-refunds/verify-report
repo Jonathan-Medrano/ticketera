@@ -1,0 +1,123 @@
+## Verification Report
+
+**Change**: consumibles-bar-partial-refunds
+**Version**: Slice 1 Delta Spec
+**Mode**: Standard
+
+---
+
+### Completeness
+| Metric | Value |
+|--------|-------|
+| Tasks total | 15 |
+| Tasks complete | 0 |
+| Tasks incomplete | 15 |
+
+**Incomplete tasks artifact entries**
+- El artifact `sdd/consumibles-bar-partial-refunds/tasks` sigue con 15/15 checks abiertos, aunque el código implementado cubre gran parte del slice. El tracking de tasks está desactualizado.
+- No existe artifact local `apply-progress` para este change; la verificación se hizo contra proposal/spec/design/tasks y código actual.
+
+---
+
+### Build & Tests Execution
+
+**Build**: ➖ Omitido por instrucción del workspace (`Never build after changes`)
+
+**Type-check backend**: ✅ Passed
+```text
+npx tsc --noEmit
+```
+
+**Type-check frontend**: ⚠️ Failed (deuda global no relacionada)
+```text
+npx tsc --noEmit
+app/checkout/page.tsx(12,11): error TS2741: Property 'params' is missing in type '{}' but required in type '{ params: Promise<{ tenant: string; }>; }'.
+app/consumibles/checkout/page.tsx(12,11): error TS2741: Property 'params' is missing in type '{}' but required in type '{ params: Promise<{ tenant: string; }>; }'.
+app/revendedor/layout.tsx(17,24): error TS2345: Argument of type 'InternalPermissions | undefined' is not assignable to parameter of type 'Permisos | undefined'.
+components/navbar.tsx(104,98): error TS18047: 'session' is possibly 'null'.
+components/tenant/tenant-home-sections.test.tsx(5,66): error TS2307: Cannot find module './tenant-home-sections' or its corresponding type declarations.
+components/tenant/tenant-home.tsx(600,21): error TS2322: Property 'style' does not exist on type '...'.
+components/tenant/tenant-home.tsx(651,14): error TS2304: Cannot find name 'Ticket'.
+components/tenant/tenant-info-page.tsx(5,41): error TS2724: '@/lib/tenant' has no exported member named 'TenantInfoPageKey'.
+components/tenant/use-tenant-quick-purchase.ts(9,38): error TS2307: Cannot find module './tenant-home-sections' or its corresponding type declarations.
+lib/tenant-rich-text.ts(1,26): error TS7016: Could not find a declaration file for module 'sanitize-html'.
+proxy.ts(10,28): error TS2339: Property 'auth' does not exist on type 'NextRequest'.
+```
+
+**Focused backend tests**: ✅ 3 passed / ❌ 0 failed / ⚠️ 0 skipped
+```text
+node ./scripts/prepare-test-db.cjs; if ($?) { node --import tsx --import ./src/test-env.ts --test --test-concurrency=1 src/consumibles-bar-partial-refunds.test.ts src/tenant-mis-consumibles.test.ts }
+✔ barra resolves mixed consumibles lines, refunds only crossed quantities, and exposes stock-shortage trace
+✔ confirmar remains shorthand for all delivered and skips automatic refund creation
+✔ tenant mis-consumibles returns public consumable QR grouped by sale
+```
+
+**Focused frontend tests**: ✅ 17 passed / ❌ 0 failed / ⚠️ 0 skipped
+```text
+npx tsx --test components/dashboard/consumibles-canjear-helpers.test.ts components/dashboard/consumibles-ventas-content.test.ts components/dashboard/reembolsos-content.test.tsx components/tenant/mis-consumibles-content.test.tsx
+✔ 17 tests passed
+```
+
+**Coverage**: ➖ Not available
+
+---
+
+### Spec Compliance Matrix
+
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| Resolver QR por producto con estado visible | Ticket mixto resuelto desde barra | `backend/src/consumibles-bar-partial-refunds.test.ts > barra resolves mixed consumibles lines, refunds only crossed quantities, and exposes stock-shortage trace` | ✅ COMPLIANT |
+| Resolver QR por producto con estado visible | Todo entregado por shorthand | `backend/src/consumibles-bar-partial-refunds.test.ts > confirmar remains shorthand for all delivered and skips automatic refund creation` | ✅ COMPLIANT |
+| Refund automático solo sobre ítems cruzados | Refund parcial por faltante | `backend/src/consumibles-bar-partial-refunds.test.ts > barra resolves mixed consumibles lines, refunds only crossed quantities, and exposes stock-shortage trace` | ✅ COMPLIANT |
+| Refund automático solo sobre ítems cruzados | Sin refund si no hay cruces | `backend/src/consumibles-bar-partial-refunds.test.ts > confirmar remains shorthand for all delivered and skips automatic refund creation` | ✅ COMPLIANT |
+| Visibilidad operativa de refunds por faltante de barra | Caso visible en Reembolsos | `backend/src/consumibles-bar-partial-refunds.test.ts > barra resolves mixed consumibles lines, refunds only crossed quantities, and exposes stock-shortage trace`; `platea/components/dashboard/reembolsos-content.test.tsx > Reembolsos renders stock-shortage automatic refunds for operators` | ✅ COMPLIANT |
+| Cierre con trazabilidad entregado vs reembolsado | Buyer ve resultado final mixto | `backend/src/consumibles-bar-partial-refunds.test.ts > barra resolves mixed consumibles lines, refunds only crossed quantities, and exposes stock-shortage trace`; `platea/components/tenant/mis-consumibles-content.test.tsx > Mis consumibles renders mixed delivered/refunded results without buyer self-service refund actions` | ✅ COMPLIANT |
+| Cierre con trazabilidad entregado vs reembolsado | Trazabilidad de cierre operativo | `backend/src/consumibles-bar-partial-refunds.test.ts > barra resolves mixed consumibles lines, refunds only crossed quantities, and exposes stock-shortage trace` | ⚠️ PARTIAL |
+
+**Compliance summary**: 6/7 scenarios compliant
+
+---
+
+### Correctness (Static — Structural Evidence)
+| Requirement | Status | Notes |
+|------------|--------|-------|
+| Resolver QR por producto con estado visible | ✅ Implemented | `backend/src/routes/canjear.ts` acepta `accion: 'resolver'`; `backend/src/lib/consumibles-redeem.ts` valida y persiste resolución itemizada en `consumibles_venta_resolucion_items`. |
+| Refund automático solo sobre ítems cruzados | ✅ Implemented | Refund parcial síncrono con `PaymentRefund.create({ payment_id, body: { amount } })`, idempotency key por venta y reverso proporcional en `platform_sale_allocations`. |
+| Visibilidad operativa de refunds por faltante de barra | ✅ Implemented | `refund_manual_cases.request_origin` soporta `bar_stockout_auto`; backend lista el caso y frontend muestra label “Faltante en barra”. |
+| Cierre con trazabilidad entregado vs reembolsado | ⚠️ Partial | Backend expone `delivered_amount`, `refunded_amount` y cantidades por item en ventas/tenant; buyer lo muestra. Pero `platea/components/dashboard/consumibles-ventas-content.tsx` todavía no renderiza el desglose entregado/reembolsado en el detalle del operador. |
+
+---
+
+### Coherence (Design)
+| Decision | Followed? | Notes |
+|----------|-----------|-------|
+| Nueva tabla itemizada `consumibles_venta_resolucion_items` | ✅ Yes | Implementada en `backend/src/lib/backend-schema.ts` y usada desde `consumibles-redeem.ts`. |
+| Refund síncrono durante el cierre | ✅ Yes | `resolveConsumiblesRedeem()` ejecuta refund antes del commit y hace rollback si falla. |
+| Refund MP parcial por `amount` con idempotency key | ✅ Yes | `executePartialMercadoPagoRefund()` usa `PaymentRefund.create` con `body.amount` y `idempotencyKey`. |
+| Reverso proporcional de profit sharing | ✅ Yes | `reversePlatformAllocationsProportionally()` se invoca al generar refund automático. |
+| No reponer `barra_stock.stock_actual` | ✅ Yes | No hay actualización de `barra_stock` en el flujo de resolución parcial. |
+| Buyer visibility file plan | ⚠️ Deviated | El diseño apuntaba a `mis-tickets-content.tsx`, pero la implementación real quedó en `platea/components/tenant/mis-consumibles-content.tsx`. La desviación es coherente con el dominio de consumibles y no rompe el spec. |
+
+---
+
+### Issues Found
+
+**CRITICAL** (must fix before archive):
+- `platea/components/dashboard/consumibles-ventas-content.tsx` no muestra en UI operativa el desglose final entregado vs reembolsado por item ni los montos `delivered_amount` / `refunded_amount`; por eso el escenario “Trazabilidad de cierre operativo” queda solo parcialmente cubierto.
+
+**WARNING** (should fix):
+- El artifact `tasks` no fue actualizado: sigue 0/15 checks completos y ya no refleja el estado real del cambio.
+- No existe artifact `apply-progress` en `sdd/consumibles-bar-partial-refunds/`.
+- Falta evidencia ejecutada para dos casos pedidos por la estrategia/tareas: 100% refund (`estado = cancelado`) y rollback ante falla de Mercado Pago.
+- El type-check global de frontend sigue fallando, pero los errores reportados no caen en los archivos tocados por este slice ni bloquearon los suites focalizados.
+
+**SUGGESTION** (nice to have):
+- Agregar test frontend específico para el modal/detalle de ventas de consumibles verificando cantidades entregadas/reembolsadas y montos finales.
+- Agregar test backend que fuerce error de MP para probar rollback completo y persistencia en `pendiente`.
+
+---
+
+### Verdict
+FAIL
+
+La slice backend y buyer quedó mayormente sólida y con suites focalizados verdes, pero NO pasa verify completo porque la trazabilidad operativa en la UI de ventas internas sigue incompleta respecto del spec.

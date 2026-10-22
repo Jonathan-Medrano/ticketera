@@ -1,0 +1,1908 @@
+// Prisma schema for PlateaPro/Ticketera — Postgres on Supabase
+// Generated from backend/src/lib/backend-schema.ts + actualizar db.sql
+// Phase 1 Task 1.3 of migrate-to-postgres-prisma change.
+
+generator client {
+  provider = "prisma-client-js"
+  // Default output: generates into the consumer's node_modules/.prisma/client.
+  // Each consumer (backend/, platea/) runs `prisma generate` via postinstall
+  // and the client lands in their own node_modules.
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // Pooler (port 6543) — runtime queries
+  directUrl = env("DIRECT_URL") // Direct (port 5432) — migrations + FOR UPDATE transactions
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum PaymentProvider {
+  mercadopago
+}
+
+enum PaymentAccountStatus {
+  pending_validation
+  ready_to_sell
+  blocked
+}
+
+enum PaymentAccountReason {
+  credentials_invalid
+  provider_unreachable
+  provider_blocked
+  manual_block
+  validation_pending
+}
+
+enum ModofechaEnum {
+  unica
+  multiple
+  // RESERVADO / no implementado. La API (isModoFechaValido en eventos.ts) NO permite crear/editar
+  // eventos 'pase'; el cálculo de velocity lo rechaza explícitamente. No quitar este valor sin
+  // recrear el tipo: Postgres no soporta ALTER TYPE ... DROP VALUE (hay que crear un enum nuevo,
+  // migrar la columna eventos.modo_fecha y dropear el viejo). Inofensivo mientras no se use.
+  pase
+}
+
+enum MarketingCampanaTipoEnum {
+  manual
+  automatica
+}
+
+// Tipo real del consumible — reemplaza la heurística de texto client-side
+// (clasificarItem en tenant-consumibles-evento.tsx) que adivinaba "bebida vs
+// comida" buscando palabras clave en el nombre. `categoria` (texto libre en
+// Consumible, más abajo) sigue existiendo para sub-etiquetas visuales
+// ("Cervezas", "Tragos") — este enum es la clasificación estructural real.
+enum ConsumibleTipoEnum {
+  bebida_alcoholica
+  bebida_sin_alcohol
+  comida
+  otro
+}
+
+enum MarketingCampanaEstadoEnum {
+  borrador
+  enviando
+  enviada
+  pausada
+}
+
+enum MarketingEnvioEstadoEnum {
+  pendiente
+  enviado
+  abierto
+  clicked
+  bounced
+  spam
+  error
+}
+
+enum MarketingSegmentoTipoEnum {
+  manual
+}
+
+enum MarketingCodigoTipoEnum {
+  porcentaje
+  monto_fijo
+}
+
+enum MarketingCodigoAplicaAEnum {
+  todos
+  entradas
+  consumibles
+}
+
+enum PlatformMessageTipoEnum {
+  info
+  warning
+  critical
+}
+
+enum PlatformMessageTargetTypeEnum {
+  all
+  empresa
+}
+
+enum PlatformFlowEnum {
+  entradas
+  consumibles
+}
+
+enum PlatformSaleAllocSourceTypeEnum {
+  entrada
+  consumible_venta
+  addon_venta
+}
+
+enum PlatformSaleAllocEntryKindEnum {
+  allocation
+  reversal
+}
+
+enum ProcessedWebhookStatusEnum {
+  processing
+  done
+  failed
+}
+
+// ---- Domain: auth ----
+
+model Empresa {
+  id                            String    @id @db.VarChar(36)
+  nombre                        String    @db.VarChar(191)
+  slug                          String    @unique @db.VarChar(191)
+  email                         String?   @db.VarChar(191)
+  password                      String?   @db.VarChar(255)
+  password_changed_at           DateTime? @db.Timestamptz()
+  admin_nombre                  String?   @db.VarChar(191)
+  admin_apellido                String?   @db.VarChar(191)
+  activa                        Boolean   @default(true)
+  es_prueba                     Boolean   @default(false)
+  logo_url                      String?   @db.Text
+  favicon_url                   String?   @db.Text
+  navbar_size                   String?   @db.VarChar(30)
+  // Tamano del logo, independiente de navbar_size. NULL = se deriva de
+  // navbar_size (comportamiento historico), asi los tenants que ya existen no
+  // cambian de aspecto al agregarse la columna.
+  logo_size                     String?   @db.VarChar(30)
+  navbar_color                  String?   @db.VarChar(20)
+  font                          String?   @db.VarChar(50)
+  color_primario                String?   @db.VarChar(20)
+  color_fondo                   String?   @db.VarChar(20)
+  color_texto                   String?   @db.VarChar(20)
+  // Layout general del home del tenant. null/"clasico" = grilla de cards (default
+  // historico: NO cambiar para tenants existentes) | "cartelera" = proximo evento en
+  // portada + grilla secundaria | "agenda" = filas densas por fecha.
+  // Validado contra allowlist en backend/src/routes/sitio-venta.ts.
+  eventos_layout                String?   @db.VarChar(30)
+  desktop_event_card_size       String?   @db.VarChar(30)
+  mobile_event_layout           String?   @db.VarChar(30)
+  // "clasico" (default, imagen 4:3 arriba + cuerpo) | "editorial" (imagen full-bleed
+  // + overlay de texto). Ver sitio-venta-editor-plantillas-bloques Fase C.
+  event_card_style              String?   @db.VarChar(20)
+  mostrar_descripcion_home      Boolean   @default(true)
+  mostrar_tanda_activa_home     Boolean   @default(true)
+  mostrar_badge_stock_home      Boolean   @default(true)
+  mostrar_fecha_home            Boolean   @default(true)
+  mostrar_lugar_home            Boolean   @default(true)
+  mostrar_precio_home           Boolean   @default(true)
+  titulo_eventos_home           String?   @db.VarChar(191)
+  subtitulo_eventos_home        String?   @db.VarChar(191)
+  cta_eventos_home              String?   @db.VarChar(191)
+  banner_variant                String?   @db.VarChar(50)
+  descripcion                   String?   @db.Text
+  whatsapp                      String?   @db.VarChar(50)
+  support_contact_email         String?   @db.VarChar(191)
+  // TODO: banners is longtext in MySQL — stored as JSON or serialized HTML; use Json if structured, Text if raw HTML
+  banners                       String?   @db.Text
+  home_sections                 String?   @db.Text
+  info_pages                    String?   @db.Text
+  faqs                          String?   @db.Text
+  galeria_fotos                 Json?     @db.JsonB
+  announcement_bar              Json?     @db.JsonB
+  social_links                  Json?     @db.JsonB
+  color_superficie              String?   @db.VarChar(20)
+  border_radius                 String?   @db.VarChar(20)
+  button_style                  String?   @db.VarChar(20)
+  heading_font                  String?   @db.VarChar(50)
+  navbar_blur                   Boolean   @default(false)
+  card_columns                  String?   @db.VarChar(10)
+  section_spacing               String?   @db.VarChar(20)
+  tenant_public_disabled        Boolean   @default(false)
+  tenant_public_disabled_at     DateTime? @db.Timestamptz()
+  // Opt-out de la vidriera de descubrimiento cross-tenant (home + /eventos, ver
+  // backend/src/routes/vidriera.ts) -- independiente de tenant_public_disabled:
+  // una empresa puede querer mantener su storefront propio activo pero no aparecer
+  // en el listado agregado de todas las empresas.
+  vidriera_disabled             Boolean   @default(false)
+  vidriera_disabled_at          DateTime? @db.Timestamptz()
+  suspendido                    Boolean   @default(false)
+  suspendido_at                 DateTime? @db.Timestamptz()
+  suspendido_motivo             String?   @db.VarChar(500)
+  aprobada                      Boolean   @default(true)
+  aprobada_at                   DateTime? @db.Timestamptz()
+  // Email verification (registro público): default true grandfatherea empresas
+  // existentes; el registro público lo setea false hasta verificar por código.
+  email_verificado              Boolean   @default(true)
+  email_verificado_at           DateTime? @db.Timestamptz()
+  // Email marketing
+  email_marketing_from          String?   @db.VarChar(255)
+  email_marketing_from_name     String?   @db.VarChar(100)
+  email_marketing_habilitado    Boolean   @default(false)
+  // Ventana configurable para el job de carrito abandonado (minutos post-expiración).
+  // Default: 60–120 min (esperar 1h y no más de 2h después de que expira el checkout).
+  marketing_carrito_ventana_min Int       @default(60)
+  marketing_carrito_ventana_max Int       @default(120)
+  // Feature flag para triggers automáticos de email (evento_proximo, post_evento, etc.)
+  marketing_automatizaciones    Boolean   @default(false)
+  // Tracking
+  ga4_measurement_id            String?   @db.VarChar(50)
+  meta_pixel_id                 String?   @db.VarChar(50)
+  gtm_container_id              String?   @db.VarChar(50)
+  // Refund policy
+  buyer_event_refunds_enabled   Boolean   @default(false)
+  buyer_auto_refunds_enabled    Boolean   @default(false)
+  buyer_auto_refunds_scope      String    @default("todos") @db.VarChar(20)
+  // Cool-off: si > 0, los refunds pedidos por el comprador dentro de N horas desde
+  // confirmed_at se auto-aprueban automáticamente (siempre que el evento no haya sucedido).
+  buyer_cool_off_window_hours   Int       @default(0)
+  // Ventana en dias desde la compra para que el comprador pueda PEDIR reembolso.
+  // Fuera de esta ventana, el endpoint del tenant rechaza el pedido con HTTP 409.
+  buyer_request_window_days     Int       @default(30)
+  // SLA en dias para que la empresa responda al pedido manual (aprobar / rechazar).
+  // Vencido el SLA sin respuesta, el job cron auto-aprueba el reembolso con razon "sla_empresa_vencido".
+  manual_review_sla_days        Int       @default(7)
+  // Fee billing mode: 'absorbed' = empresa paga la comisión (precio se descuenta del organizador, comportamiento legacy).
+  // 'passed_to_buyer' = comprador paga la comisión completa como cargo por servicio sobre el precio base.
+  // 'split' = la comisión se reparte: el comprador paga fee_split_buyer_pct % y la empresa absorbe el resto.
+  // La comisión en sí no cambia (sigue siendo la de empresa_marketplace_fee_overrides / defaults); la plataforma
+  // SIEMPRE cobra la comisión completa vía application_fee de MP — solo cambia cuánto se carga al comprador.
+  // 'absorbed' ≡ split 0%, 'passed_to_buyer' ≡ split 100%.
+  fee_billing_mode              String    @default("absorbed") @db.VarChar(30)
+  // % de la comisión que paga el comprador cuando fee_billing_mode = 'split' (0..100). Null en los otros modos.
+  fee_split_buyer_pct           Decimal?  @db.Decimal(5, 2)
+  // Feature flags
+  revendedor_habilitado         Boolean   @default(true)
+  consumibles_habilitado        Boolean   @default(true)
+  pos_movil_habilitado          Boolean   @default(false)
+  must_change_password          Boolean   @default(false)
+  // Mercado Pago checkout settings
+  mp_max_installments           Int       @default(1)
+  // Reseller default commission
+  comision_revendedor_default   Decimal?  @db.Decimal(10, 2)
+  // @updatedAt is informational; actual updates come from Postgres set_updated_at() trigger
+  created_at                    DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([slug])
+  @@index([es_prueba])
+  @@map("empresas")
+}
+
+model Usuario {
+  id                        String    @id @db.VarChar(36)
+  empresa_id                String    @db.VarChar(36)
+  nombre                    String    @default("") @db.VarChar(100)
+  apellido                  String    @default("") @db.VarChar(100)
+  email                     String    @default("") @db.VarChar(191)
+  password                  String    @default("") @db.VarChar(255)
+  password_changed_at       DateTime  @default(now()) @db.Timestamptz()
+  rol                       String    @default("vendedor") @db.VarChar(50)
+  // permisos is a JSON blob stored as longtext in MySQL
+  permisos                  String?   @db.Text
+  porcentaje_comision       Decimal?  @db.Decimal(10, 2)
+  activo                    Boolean   @default(true)
+  must_change_password      Boolean   @default(false)
+  temporary_password_set_at DateTime? @db.Timestamptz()
+  created_at                DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@map("usuarios")
+}
+
+model Rol {
+  id             String   @id @db.VarChar(36)
+  empresa_id     String   @db.VarChar(36)
+  nombre         String   @db.VarChar(100)
+  slug           String   @db.VarChar(50)
+  // permisos is a JSON blob stored as longtext in MySQL
+  permisos       String?  @db.Text
+  es_predefinido Boolean  @default(false)
+  created_at     DateTime @default(now()) @db.Timestamptz()
+
+  @@unique([empresa_id, slug])
+  @@map("roles")
+}
+
+model Comprador {
+  id                          String    @id @db.VarChar(36)
+  empresa_id                  String    @db.VarChar(36)
+  nombre                      String    @db.VarChar(191)
+  apellido                    String?   @db.VarChar(100)
+  email                       String    @db.VarChar(191)
+  dni                         String?   @db.VarChar(20)
+  telefono                    String?   @db.VarChar(30)
+  password                    String?   @db.VarChar(255)
+  password_changed_at         DateTime  @default(now()) @db.Timestamptz()
+  phone_e164                  String?   @db.VarChar(32)
+  phone_verified_at           DateTime? @db.Timestamptz()
+  phone_verification_provider String?   @db.VarChar(40)
+  delivery_preference         String    @default("email") @db.VarChar(20)
+  activo                      Boolean   @default(true)
+  email_marketing_opt_out     Boolean   @default(false)
+  created_at                  DateTime  @default(now()) @db.Timestamptz()
+  must_change_password        Boolean   @default(false)
+  temporary_password_set_at   DateTime? @db.Timestamptz()
+
+  @@index([empresa_id, email])
+  @@index([email])
+  @@index([dni])
+  @@index([created_at])
+  @@map("compradores")
+}
+
+model LoginToken {
+  // id = sha256(token) en hex = 64 chars. VarChar(36) (tamaño UUID) truncaba en MySQL
+  // pero en Postgres rompe el INSERT (value too long) → login por token caído.
+  id           String   @id @db.VarChar(64)
+  comprador_id String   @db.VarChar(36)
+  empresa_slug String   @db.VarChar(191)
+  expires_at   DateTime @db.Timestamptz()
+  usado        Boolean  @default(false)
+
+  @@index([comprador_id])
+  @@map("login_tokens")
+}
+
+model PasswordResetToken {
+  id                   String    @id @db.VarChar(36)
+  actor_type           String    @db.VarChar(20)
+  actor_id             String    @db.VarChar(36)
+  empresa_id           String    @db.VarChar(36)
+  tenant_slug          String?   @db.VarChar(191)
+  email                String    @db.VarChar(191)
+  token_hash           String    @unique @db.VarChar(64)
+  expires_at           DateTime  @db.Timestamptz()
+  used_at              DateTime? @db.Timestamptz()
+  invalidated_at       DateTime? @db.Timestamptz()
+  invalidation_reason  String?   @db.VarChar(40)
+  requested_ip         String?   @db.VarChar(64)
+  requested_user_agent String?   @db.VarChar(500)
+  consumed_ip          String?   @db.VarChar(64)
+  consumed_user_agent  String?   @db.VarChar(500)
+  created_at           DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([actor_type, actor_id])
+  @@index([token_hash])
+  @@map("password_reset_tokens")
+}
+
+// Códigos de verificación de email (6 dígitos) para el registro público de empresas.
+// Un solo código activo por empresa: al reenviar se borran los previos no consumidos.
+model EmailVerificationCode {
+  id              String    @id @db.VarChar(36)
+  empresa_id      String    @db.VarChar(36)
+  email           String    @db.VarChar(191)
+  code_hash       String    @db.VarChar(64)
+  link_token_hash String?   @db.VarChar(64)
+  expires_at      DateTime  @db.Timestamptz()
+  consumed_at     DateTime? @db.Timestamptz()
+  attempts        Int       @default(0)
+  requested_ip    String?   @db.VarChar(64)
+  created_at      DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@index([link_token_hash])
+  @@map("email_verification_codes")
+}
+
+// ---- Domain: platform ----
+
+model PlatformAdminUser {
+  id                        String    @id @db.VarChar(36)
+  nombre                    String    @db.VarChar(191)
+  email                     String    @unique @db.VarChar(191)
+  login_alias               String    @unique @db.VarChar(80)
+  password                  String    @db.VarChar(255)
+  password_changed_at       DateTime? @db.Timestamptz()
+  role_slug                 String    @default("empleado") @db.VarChar(40)
+  permisos                  String?   @db.Text
+  singleton_key             String?   @unique @db.VarChar(80)
+  activo                    Boolean   @default(true)
+  must_change_password      Boolean   @default(false)
+  temporary_password_set_at DateTime? @db.Timestamptz()
+  created_at                DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("platform_admin_users")
+}
+
+model PlatformPaymentAccount {
+  id                       String                @id @db.VarChar(36)
+  platform_admin_user_id   String?               @db.VarChar(36)
+  provider                 PaymentProvider       @default(mercadopago)
+  status                   PaymentAccountStatus  @default(pending_validation)
+  reason                   PaymentAccountReason? @default(validation_pending)
+  credential_ciphertext    String                @db.Text
+  credential_iv            String                @db.VarChar(64)
+  credential_tag           String                @db.VarChar(64)
+  credential_last4         String?               @db.VarChar(4)
+  oauth_refresh_ciphertext String?               @db.Text
+  oauth_refresh_iv         String?               @db.VarChar(64)
+  oauth_refresh_tag        String?               @db.VarChar(64)
+  oauth_token_type         String?               @db.VarChar(40)
+  oauth_scope              String?               @db.Text
+  oauth_expires_at         DateTime?             @db.Timestamptz()
+  oauth_connected_at       DateTime?             @db.Timestamptz()
+  provider_account_label   String?               @db.VarChar(120)
+  collector_id             String?               @db.VarChar(64)
+  validated_at             DateTime?             @db.Timestamptz()
+  last_validation_error    String?               @db.VarChar(80)
+  blocked_at               DateTime?             @db.Timestamptz()
+  created_at               DateTime              @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at               DateTime              @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([platform_admin_user_id, provider])
+  @@index([platform_admin_user_id, status])
+  @@map("platform_payment_accounts")
+}
+
+model PlatformAdminRelationship {
+  platform_admin_user_id             String   @id @db.VarChar(36)
+  parent_platform_admin_user_id      String?  @db.VarChar(36)
+  branch_root_platform_admin_user_id String   @db.VarChar(36)
+  depth_from_root                    Int      @default(0)
+  source                             String   @default("manual") @db.VarChar(40)
+  created_at                         DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                         DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([parent_platform_admin_user_id])
+  @@index([branch_root_platform_admin_user_id])
+  @@map("platform_admin_relationships")
+}
+
+model PlatformAdminClosure {
+  ancestor_platform_admin_user_id   String   @db.VarChar(36)
+  descendant_platform_admin_user_id String   @db.VarChar(36)
+  depth                             Int
+  created_at                        DateTime @default(now()) @db.Timestamptz()
+
+  @@id([ancestor_platform_admin_user_id, descendant_platform_admin_user_id])
+  @@index([descendant_platform_admin_user_id, depth])
+  @@map("platform_admin_closure")
+}
+
+model PlatformAdminCapabilityGrant {
+  id                                String   @id @db.VarChar(36)
+  platform_admin_user_id            String   @db.VarChar(36)
+  capability_key                    String   @db.VarChar(120)
+  granted_by_platform_admin_user_id String?  @db.VarChar(36)
+  source                            String   @default("manual") @db.VarChar(40)
+  created_at                        DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                        DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([platform_admin_user_id, capability_key])
+  @@index([granted_by_platform_admin_user_id])
+  @@map("platform_admin_capability_grants")
+}
+
+model PlatformAdminRevenueGrant {
+  id                            String           @id @db.VarChar(36)
+  parent_platform_admin_user_id String           @db.VarChar(36)
+  child_platform_admin_user_id  String           @db.VarChar(36)
+  flow                          PlatformFlowEnum
+  percentage                    Decimal          @default(0) @db.Decimal(5, 2)
+  source                        String           @default("manual") @db.VarChar(40)
+  created_at                    DateTime         @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                    DateTime         @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([parent_platform_admin_user_id, child_platform_admin_user_id, flow])
+  @@index([child_platform_admin_user_id, flow])
+  @@map("platform_admin_revenue_grants")
+}
+
+model PlatformAdminMigrationAudit {
+  audit_key  String   @id @db.VarChar(120)
+  status     String   @db.VarChar(40)
+  notes      String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@map("platform_admin_migration_audit")
+}
+
+model PlatformAdminUserFlowShare {
+  id                              String           @id @db.VarChar(36)
+  platform_admin_user_id          String           @db.VarChar(36)
+  flow                            PlatformFlowEnum
+  percentage                      Decimal          @default(0) @db.Decimal(5, 2)
+  configured_by_platform_admin_id String?          @db.VarChar(36)
+  created_at                      DateTime         @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                      DateTime         @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([platform_admin_user_id, flow])
+  @@index([flow])
+  @@map("platform_admin_user_flow_shares")
+}
+
+model PlatformAdminUserEmpresaOverride {
+  id                              String           @id @db.VarChar(36)
+  platform_admin_user_id          String           @db.VarChar(36)
+  empresa_id                      String           @db.VarChar(36)
+  flow                            PlatformFlowEnum
+  percentage                      Decimal          @default(0) @db.Decimal(5, 2)
+  configured_by_platform_admin_id String?          @db.VarChar(36)
+  created_at                      DateTime         @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                      DateTime         @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([platform_admin_user_id, empresa_id, flow])
+  @@index([empresa_id, flow])
+  @@index([platform_admin_user_id])
+  @@map("platform_admin_user_empresa_overrides")
+}
+
+model PlatformSaleAllocation {
+  id                                String                          @id @db.VarChar(36)
+  source_type                       PlatformSaleAllocSourceTypeEnum
+  source_id                         String                          @db.VarChar(36)
+  checkout_session_id               String?                         @db.VarChar(80)
+  empresa_id                        String                          @db.VarChar(36)
+  flow                              PlatformFlowEnum
+  currency                          String                          @default("ARS") @db.VarChar(12)
+  owner_fee_amount                  Decimal                         @default(0) @db.Decimal(10, 2)
+  allocated_amount                  Decimal                         @default(0) @db.Decimal(10, 2)
+  allocation_percentage             Decimal                         @default(0) @db.Decimal(5, 2)
+  entry_kind                        PlatformSaleAllocEntryKindEnum  @default(allocation)
+  reversal_for_allocation_id        String?                         @unique @db.VarChar(36)
+  reversal_reason                   String?                         @db.VarChar(60)
+  reversal_reference_type           String?                         @db.VarChar(40)
+  reversal_reference_id             String?                         @db.VarChar(80)
+  configured_platform_admin_user_id String                          @db.VarChar(36)
+  effective_platform_admin_user_id  String                          @db.VarChar(36)
+  fallback_reason                   String                          @default("none") @db.VarChar(40)
+  created_at                        DateTime                        @default(now()) @db.Timestamptz()
+
+  @@index([effective_platform_admin_user_id, flow, created_at])
+  @@index([configured_platform_admin_user_id, flow, created_at])
+  @@index([checkout_session_id, flow])
+  @@index([source_type, source_id])
+  @@index([reversal_reference_type, reversal_reference_id])
+  @@index([source_type, source_id, entry_kind, created_at])
+  @@map("platform_sale_allocations")
+}
+
+model PlatformMarketplaceFeeDefault {
+  id                           String   @id @db.VarChar(36)
+  flow                         String   @db.VarChar(40)
+  mode                         String?  @db.VarChar(20)
+  percentage                   Decimal? @db.Decimal(5, 2)
+  fixed_amount                 Decimal? @db.Decimal(10, 2)
+  updated_by_platform_admin_id String?  @db.VarChar(36)
+  created_at                   DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                   DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([flow])
+  @@map("platform_marketplace_fee_defaults")
+}
+
+model PlatformImpersonationToken {
+  id         String    @id @db.VarChar(36)
+  token_hash String    @unique @db.VarChar(64)
+  empresa_id String    @db.VarChar(36)
+  created_by String    @db.VarChar(36)
+  expires_at DateTime  @db.Timestamptz()
+  used_at    DateTime? @db.Timestamptz()
+
+  @@index([expires_at])
+  @@map("platform_impersonation_tokens")
+}
+
+model PlatformMessage {
+  id                String                        @id @db.VarChar(36)
+  titulo            String                        @db.VarChar(191)
+  cuerpo            String                        @db.Text
+  tipo              PlatformMessageTipoEnum       @default(info)
+  target_type       PlatformMessageTargetTypeEnum @default(all)
+  target_empresa_id String?                       @db.VarChar(36)
+  activo            Boolean                       @default(true)
+  expires_at        DateTime?                     @db.Timestamptz()
+  created_by        String                        @db.VarChar(36)
+  created_at        DateTime                      @default(now()) @db.Timestamptz()
+
+  @@index([target_type, target_empresa_id])
+  @@index([activo])
+  @@map("platform_messages")
+}
+
+model PlatformMessageDismissal {
+  message_id   String   @db.VarChar(36)
+  empresa_id   String   @db.VarChar(36)
+  dismissed_at DateTime @default(now()) @db.Timestamptz()
+
+  @@id([message_id, empresa_id])
+  @@map("platform_message_dismissals")
+}
+
+// ---- Domain: eventos ----
+
+model Evento {
+  id                           String        @id @db.VarChar(36)
+  empresa_id                   String        @db.VarChar(36)
+  nombre                       String        @db.VarChar(191)
+  descripcion                  String?       @db.Text
+  lugar                        String?       @db.VarChar(191)
+  // Ciudad para el filtro de ubicacion de la vidriera (vidriera.ts) -- separada de
+  // "lugar" (que es texto libre de direccion/nombre del lugar) a proposito: filtrar
+  // por texto libre daria resultados inconsistentes.
+  ciudad                       String?       @db.VarChar(100)
+  modo_fecha                   ModofechaEnum @default(unica)
+  imagen_url                   String?       @db.Text
+  activo                       Boolean       @default(true)
+  // Publication scheduling
+  publication_mode             String        @default("immediate") @db.VarChar(20)
+  pre_publish_visibility       String        @default("hidden") @db.VarChar(30)
+  publish_at_utc               DateTime?     @db.Timestamptz()
+  publish_timezone             String?       @db.VarChar(64)
+  published_live_at            DateTime?     @db.Timestamptz()
+  venta_consumibles_habilitada Boolean       @default(false)
+  buyer_event_refunds_enabled  Boolean       @default(false)
+  // Seated events: "libre" (default pool-based) | "numerado" (individual assigned seats)
+  tipo_mapa                    String        @default("libre") @db.VarChar(20)
+  created_at                   DateTime      @default(now()) @db.Timestamptz()
+  updated_at                   DateTime      @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@index([created_at])
+  @@map("eventos")
+}
+
+model EventoTanda {
+  id           String    @id @db.VarChar(36)
+  evento_id    String    @db.VarChar(36)
+  nombre       String?   @db.VarChar(191)
+  descripcion  String?   @db.Text
+  imagen_url   String?   @db.Text
+  estado       String    @default("activa") @db.VarChar(40)
+  orden        Int       @default(0)
+  activa_desde DateTime? @db.Timestamptz()
+  created_at   DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([evento_id])
+  @@index([evento_id, estado])
+  @@index([evento_id, orden])
+  @@map("evento_tandas")
+}
+
+model EventoFecha {
+  id        String    @id @db.VarChar(36)
+  evento_id String    @db.VarChar(36)
+  fecha     DateTime? @db.Timestamptz()
+
+  @@index([evento_id])
+  @@index([evento_id, fecha])
+  @@map("evento_fechas")
+}
+
+model EntradaCategoria {
+  id                  String  @id @db.VarChar(36)
+  evento_id           String  @db.VarChar(36)
+  tanda_id            String? @db.VarChar(36)
+  nombre              String  @db.VarChar(191)
+  descripcion         String? @db.Text
+  imagen_url          String? @db.Text
+  precio              Decimal @default(0) @db.Decimal(10, 2)
+  stock               Int     @default(0)
+  stock_disponible    Int     @default(0)
+  activa              Boolean @default(true)
+  // Pack model: 1 = entrada normal. > 1 = pack (compra 1 unidad → genera N QRs).
+  // Stock se cuenta en UNIDADES del pack, NO en QRs individuales.
+  entradas_por_unidad Int     @default(1)
+
+  @@index([evento_id])
+  @@index([tanda_id])
+  @@index([evento_id, nombre])
+  @@map("entrada_categorias")
+}
+
+model EventoVentasSnapshot {
+  id                       Int      @id @default(autoincrement())
+  evento_id                String   @db.VarChar(36)
+  fecha_snapshot           DateTime @db.Date
+  vendidas_acumuladas      Int      @default(0)
+  capacidad_total_snapshot Int      @default(0)
+  ingresos_neto_acumulado  Decimal  @default(0) @db.Decimal(12, 2)
+  created_at               DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at               DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([evento_id, fecha_snapshot])
+  @@index([evento_id])
+  @@index([fecha_snapshot])
+  @@map("evento_ventas_snapshot")
+}
+
+// ---- Domain: checkout ----
+
+model CheckoutSession {
+  id                       String    @id @db.VarChar(80)
+  comprador_id             String    @db.VarChar(36)
+  empresa_id               String    @db.VarChar(36)
+  // datos is a longtext JSON blob with cart line items
+  datos                    String    @db.Text
+  estado                   String    @db.VarChar(40)
+  expires_at               DateTime? @db.Timestamptz()
+  created_at               DateTime  @default(now()) @db.Timestamptz()
+  confirmed_at             DateTime? @db.Timestamptz()
+  // Payment tracking
+  payment_id               String?   @db.VarChar(120)
+  payment_status           String?   @db.VarChar(40)
+  reconciliation_status    String    @default("none") @db.VarChar(40)
+  reconciliation_note      String?   @db.VarChar(120)
+  last_payment_checked_at  DateTime? @db.Timestamptz()
+  // Discount
+  codigo_descuento         String?   @db.VarChar(50)
+  descuento_monto          Decimal?  @db.Decimal(10, 2)
+  // Refund
+  refund_status            String?   @db.VarChar(30)
+  refund_provider_id       String?   @db.VarChar(120)
+  refund_amount            Decimal?  @db.Decimal(10, 2)
+  refund_initiated_at      DateTime? @db.Timestamptz()
+  refund_completed_at      DateTime? @db.Timestamptz()
+  refund_initiated_by      String?   @db.VarChar(64)
+  refund_error             String?   @db.VarChar(500)
+  refund_idempotency_key   String?   @db.VarChar(64)
+  refund_reason            String?   @db.VarChar(500)
+  // Delivery retry queue
+  delivery_status          String?   @db.VarChar(30)
+  delivery_retry_count     Int       @default(0)
+  delivery_next_attempt_at DateTime? @db.Timestamptz()
+  delivery_last_error      String?   @db.VarChar(500)
+  delivery_completed_at    DateTime? @db.Timestamptz()
+  // UTM tracking
+  utm_source               String?   @db.VarChar(100)
+  utm_medium               String?   @db.VarChar(100)
+  utm_campaign             String?   @db.VarChar(100)
+  // Reseller
+  revendedor_id            String?   @db.VarChar(36)
+
+  @@index([comprador_id, empresa_id, estado, expires_at])
+  @@index([empresa_id, estado, expires_at])
+  @@index([empresa_id, reconciliation_note, refund_status])
+  @@index([estado, expires_at])
+  @@index([delivery_status, delivery_next_attempt_at])
+  @@index([revendedor_id])
+  @@map("checkout_sessions")
+}
+
+model ProcessedWebhook {
+  id            Int                        @id @default(autoincrement())
+  provider      String                     @db.VarChar(50)
+  payment_id    String                     @db.VarChar(100)
+  empresa_id    String?                    @db.VarChar(36)
+  session_id    String?                    @db.VarChar(100)
+  result        String?                    @db.VarChar(50)
+  status        ProcessedWebhookStatusEnum @default(done)
+  error_message String?                    @db.Text
+  processed_at  DateTime?                  @db.Timestamptz()
+
+  @@unique([provider, payment_id])
+  @@index([processed_at(sort: Desc)])
+  @@index([empresa_id])
+  @@map("processed_webhooks")
+}
+
+// ---- Domain: entradas (tickets) ----
+
+model Entrada {
+  id                    String    @id @db.VarChar(36)
+  evento_id             String    @db.VarChar(36)
+  categoria_id          String    @db.VarChar(36)
+  fecha_id              String?   @db.VarChar(36)
+  comprador_id          String    @db.VarChar(36)
+  qr_code               String    @unique @db.VarChar(191)
+  clave_corta           String    @unique @db.VarChar(32)
+  estado                String    @db.VarChar(40)
+  precio_pagado         Decimal   @default(0) @db.Decimal(10, 2)
+  comision              Decimal   @default(0) @db.Decimal(10, 2)
+  comision_revendedor   Decimal   @default(0) @db.Decimal(10, 2)
+  mp_fee_amount         Decimal?  @db.Decimal(10, 2)
+  neto_empresa_amount   Decimal?  @db.Decimal(10, 2)
+  nombre_comprador      String?   @db.VarChar(191)
+  apellido_comprador    String?   @db.VarChar(191)
+  dni_comprador         String?   @db.VarChar(64)
+  checkout_session_id   String?   @db.VarChar(80)
+  revendedor_id         String?   @db.VarChar(36)
+  // POS presencial — null para ventas online (checkout MP), set en POS móvil
+  medio_pago_presencial String?   @db.VarChar(40)
+  vendido_by_user_id    String?   @db.VarChar(36)
+  // QR check-in audit
+  usada_at              DateTime? @db.Timestamptz()
+  used_by_user_id       String?   @db.VarChar(64)
+  used_by_user_name     String?   @db.VarChar(191)
+  // Seated events: assigned seat (null for libre/pool-based events)
+  asiento_id            String?   @db.VarChar(36)
+  created_at            DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([evento_id])
+  @@index([comprador_id])
+  @@index([revendedor_id])
+  @@index([checkout_session_id])
+  @@index([evento_id, estado, created_at])
+  @@index([clave_corta, evento_id])
+  @@index([evento_id, qr_code])
+  @@index([created_at])
+  @@map("entradas")
+}
+
+// ---- Seated events: seat map sections and individual seats ----
+//
+// Only used when evento.tipo_mapa = "numerado".
+// AsientoSeccion defines rows/cols; Asiento tracks per-seat state with row-level locks.
+
+model AsientoSeccion {
+  id                String   @id @db.VarChar(36)
+  evento_id         String   @db.VarChar(36)
+  empresa_id        String   @db.VarChar(36)
+  nombre            String   @db.VarChar(191)
+  // Maps to an EntradaCategoria — controls price and ticket type for this section
+  categoria_id      String?  @db.VarChar(36)
+  filas             Int      @default(1)
+  asientos_por_fila Int      @default(1)
+  // Display color hex for the seat map (e.g. "#2563eb")
+  color             String?  @db.VarChar(20)
+  orden             Int      @default(0)
+  created_at        DateTime @default(now()) @db.Timestamptz()
+
+  asientos Asiento[]
+
+  @@index([evento_id])
+  @@index([empresa_id])
+  @@map("asiento_secciones")
+}
+
+model Asiento {
+  id                  String    @id @db.VarChar(36)
+  seccion_id          String    @db.VarChar(36)
+  evento_id           String    @db.VarChar(36)
+  empresa_id          String    @db.VarChar(36)
+  fila                String    @db.VarChar(10)
+  numero              Int
+  // disponible | reservado | vendido | bloqueado
+  estado              String    @default("disponible") @db.VarChar(20)
+  // Set during checkout reservation; cleared on expiry or cancellation
+  checkout_session_id String?   @db.VarChar(36)
+  reserved_until      DateTime? @db.Timestamptz()
+  // Set when ticket is issued (confirmed purchase)
+  entrada_id          String?   @db.VarChar(36)
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+
+  seccion AsientoSeccion @relation(fields: [seccion_id], references: [id], onDelete: Cascade)
+
+  @@unique([seccion_id, fila, numero])
+  @@index([evento_id])
+  @@index([evento_id, estado])
+  @@index([checkout_session_id])
+  @@index([entrada_id])
+  @@map("asientos")
+}
+
+// ---- Add-ons: ítems opcionales al checkout (parking, meet&greet, merch, etc.) ----
+//
+// El organizador define add-ons por evento. En el checkout, el comprador puede sumar
+// cantidad N de cada uno. Cada unidad vendida genera un QR único canjeable en puerta
+// (mismo flow que entradas + tickets físicos: el escanear cae al fallback de addon_ventas
+// si el QR no es de entrada ni de ticket físico).
+
+model EventoAddon {
+  id               String   @id @db.VarChar(36)
+  evento_id        String   @db.VarChar(36)
+  empresa_id       String   @db.VarChar(36)
+  nombre           String   @db.VarChar(191)
+  descripcion      String?  @db.Text
+  precio           Decimal  @default(0) @db.Decimal(10, 2)
+  stock            Int      @default(0)
+  stock_disponible Int      @default(0)
+  max_por_compra   Int      @default(10)
+  activo           Boolean  @default(true)
+  orden_visual     Int      @default(0)
+  created_at       DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([evento_id, activo, orden_visual])
+  @@index([empresa_id])
+  // Acelera el filtro IDOR (WHERE id = $1 AND empresa_id = $2) usado por updateAddon/deleteAddon.
+  @@index([empresa_id, evento_id])
+  @@map("evento_addons")
+}
+
+model EventoAddonVenta {
+  id                  String    @id @db.VarChar(36)
+  addon_id            String    @db.VarChar(36)
+  comprador_id        String    @db.VarChar(36)
+  checkout_session_id String?   @db.VarChar(80)
+  evento_id           String    @db.VarChar(36)
+  empresa_id          String    @db.VarChar(36)
+  qr_code             String    @unique @db.VarChar(191)
+  clave_corta         String    @unique @db.VarChar(32)
+  estado              String    @default("valida") @db.VarChar(40)
+  precio_pagado       Decimal   @default(0) @db.Decimal(10, 2)
+  comision            Decimal   @default(0) @db.Decimal(10, 2)
+  mp_fee_amount       Decimal?  @db.Decimal(10, 2)
+  neto_empresa_amount Decimal?  @db.Decimal(10, 2)
+  // QR check-in audit
+  usada_at            DateTime? @db.Timestamptz()
+  used_by_user_id     String?   @db.VarChar(64)
+  used_by_user_name   String?   @db.VarChar(191)
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([addon_id])
+  @@index([comprador_id])
+  @@index([evento_id, estado])
+  @@index([empresa_id, estado, created_at])
+  @@index([checkout_session_id])
+  @@map("evento_addon_ventas")
+}
+
+// ---- Waitlist: lista de espera cuando una categoría está agotada ----
+//
+// El comprador se anota cuando stock_disponible=0. Cuando se libera cupo (por
+// expiración de checkout, refund, o stock manual), el sistema asigna al primer
+// waitlist en estado 'esperando' y le da 15 min para comprar (expires_at).
+// Estados: esperando → asignado → comprado | expirado | cancelado.
+
+model WaitlistEntry {
+  id                  String    @id @db.VarChar(36)
+  empresa_id          String    @db.VarChar(36)
+  evento_id           String    @db.VarChar(36)
+  categoria_id        String    @db.VarChar(36)
+  fecha_id            String?   @db.VarChar(36)
+  comprador_id        String    @db.VarChar(36)
+  cantidad_solicitada Int       @default(1)
+  estado              String    @default("esperando") @db.VarChar(40)
+  asignado_at         DateTime? @db.Timestamptz()
+  expires_at          DateTime? @db.Timestamptz()
+  notificado_at       DateTime? @db.Timestamptz()
+  cancelado_at        DateTime? @db.Timestamptz()
+  comprado_at         DateTime? @db.Timestamptz()
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([empresa_id, evento_id, categoria_id, estado])
+  @@index([comprador_id, estado])
+  @@index([categoria_id, estado, created_at])
+  @@index([expires_at])
+  @@map("waitlist_entries")
+}
+
+// ---- Pre-impresos: lotes físicos serializados para venta off-line ----
+// El organizador genera un lote de N tickets físicos (con QR único pre-bindeado).
+// Los manda a imprenta, los recibe, los entrega a revendedores o vende en mano,
+// y se canjean en puerta como cualquier entrada digital. Ver lib/preimpresos.ts.
+
+model TicketFisicoLote {
+  id                       String    @id @db.VarChar(36)
+  empresa_id               String    @db.VarChar(36)
+  evento_id                String    @db.VarChar(36)
+  categoria_id             String    @db.VarChar(36)
+  fecha_id                 String?   @db.VarChar(36)
+  cantidad_total           Int
+  precio_impreso           Decimal?  @db.Decimal(10, 2)
+  formato                  String    @default("horizontal_4xa4") @db.VarChar(40)
+  estado                   String    @default("generado") @db.VarChar(40)
+  notas                    String?   @db.Text
+  fecha_envio_imprenta     DateTime? @db.Timestamptz()
+  fecha_recepcion          DateTime? @db.Timestamptz()
+  seguridad_guilloche      Boolean   @default(false)
+  seguridad_microtexto     Boolean   @default(false)
+  seguridad_holograma_area Boolean   @default(false)
+  created_by_user_id       String?   @db.VarChar(36)
+  created_at               DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at               DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([empresa_id, evento_id])
+  @@index([evento_id, categoria_id])
+  @@index([empresa_id, estado])
+  @@map("ticket_fisico_lotes")
+}
+
+model TicketFisico {
+  id                       String    @id @db.VarChar(36)
+  lote_id                  String    @db.VarChar(36)
+  empresa_id               String    @db.VarChar(36)
+  evento_id                String    @db.VarChar(36)
+  categoria_id             String    @db.VarChar(36)
+  fecha_id                 String?   @db.VarChar(36)
+  numero_secuencia         Int
+  qr_code                  String    @unique @db.VarChar(191)
+  clave_corta              String    @unique @db.VarChar(32)
+  estado                   String    @default("disponible") @db.VarChar(40)
+  asignado_a_revendedor_id String?   @db.VarChar(36)
+  asignado_at              DateTime? @db.Timestamptz()
+  asignado_by_user_id      String?   @db.VarChar(36)
+  vendido_at               DateTime? @db.Timestamptz()
+  vendido_by_user_id       String?   @db.VarChar(64)
+  vendido_by_revendedor_id String?   @db.VarChar(36)
+  precio_vendido           Decimal?  @db.Decimal(10, 2)
+  comprador_nombre         String?   @db.VarChar(191)
+  comprador_dni            String?   @db.VarChar(64)
+  usada_at                 DateTime? @db.Timestamptz()
+  used_by_user_id          String?   @db.VarChar(64)
+  used_by_user_name        String?   @db.VarChar(191)
+  anulada_at               DateTime? @db.Timestamptz()
+  anulada_motivo           String?   @db.VarChar(191)
+  created_at               DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at               DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([lote_id, numero_secuencia])
+  @@index([evento_id, estado])
+  @@index([categoria_id, estado])
+  @@index([empresa_id, estado])
+  @@index([lote_id])
+  @@index([vendido_by_revendedor_id])
+  @@index([asignado_a_revendedor_id, estado])
+  @@map("ticket_fisicos")
+}
+
+// ---- Domain: consumibles ----
+
+model Barra {
+  id                               String    @id @db.VarChar(36)
+  evento_id                        String    @db.VarChar(36)
+  empresa_id                       String    @db.VarChar(36)
+  nombre                           String    @db.VarChar(191)
+  activa                           Boolean   @default(true)
+  buyer_consumible_refunds_enabled Boolean   @default(true)
+  archived_at                      DateTime? @db.Timestamptz()
+
+  @@index([evento_id])
+  @@index([empresa_id])
+  @@index([evento_id, empresa_id, activa])
+  @@map("barras")
+}
+
+model Consumible {
+  id          String             @id @db.VarChar(36)
+  empresa_id  String             @db.VarChar(36)
+  nombre      String             @db.VarChar(191)
+  descripcion String?            @db.Text
+  // Categoría libre (texto) para agrupar en el POS de barra (ej: Cervezas, Tragos...).
+  categoria   String?            @db.VarChar(100)
+  // Clasificación estructural real (ver ConsumibleTipoEnum) — reemplaza la
+  // heurística de texto client-side. Default "otro" + backfill en la migración
+  // que agrega esta columna clasifica los consumibles existentes.
+  tipo        ConsumibleTipoEnum @default(otro)
+  precio      Decimal            @default(0) @db.Decimal(10, 2)
+  imagen_url  String?            @db.Text
+  activo      Boolean            @default(true)
+  archived_at DateTime?          @db.Timestamptz()
+  created_at  DateTime           @default(now()) @db.Timestamptz()
+
+  // TODO: FULLTEXT index ft_consumibles_busqueda (nombre, descripcion) — NOT included here.
+  // Add via raw SQL migration: CREATE INDEX ft_consumibles_busqueda ON consumibles
+  //   USING GIN (to_tsvector('spanish', nombre || ' ' || COALESCE(descripcion, '')));
+  // Or use pg_trgm GIN for ILIKE-compatible trigram search (per design decision).
+
+  @@index([empresa_id])
+  @@map("consumibles")
+}
+
+model BarraStock {
+  id              String   @id @db.VarChar(36)
+  barra_id        String   @db.VarChar(36)
+  consumible_id   String   @db.VarChar(36)
+  stock_inicial   Int      @default(0)
+  stock_actual    Int      @default(0)
+  precio_override Decimal? @db.Decimal(10, 2)
+  activo          Boolean  @default(true)
+  // stock_ilimitado: si true, el consumible se vende sin contar ni descontar stock_actual.
+  stock_ilimitado Boolean  @default(false)
+  // agotado: kill-switch manual de disponibilidad, independiente del número de stock.
+  agotado         Boolean  @default(false)
+
+  @@unique([barra_id, consumible_id])
+  @@index([barra_id, consumible_id])
+  @@map("barra_stock")
+}
+
+model BarraStockLog {
+  id             String   @id @db.VarChar(36)
+  barra_stock_id String   @db.VarChar(36)
+  barra_id       String   @db.VarChar(36)
+  consumible_id  String   @db.VarChar(36)
+  empresa_id     String   @db.VarChar(36)
+  tipo           String   @db.VarChar(40)
+  stock_anterior Int
+  stock_nuevo    Int
+  usuario_id     String?  @db.VarChar(36)
+  nota           String?  @db.Text
+  created_at     DateTime @default(now()) @db.Timestamptz()
+
+  @@index([barra_stock_id])
+  @@index([empresa_id, created_at])
+  @@map("barra_stock_logs")
+}
+
+model ConsumiblesVenta {
+  id                     String    @id @db.VarChar(36)
+  barra_id               String    @db.VarChar(36)
+  evento_id              String    @db.VarChar(36)
+  empresa_id             String    @db.VarChar(36)
+  comprador_id           String?   @db.VarChar(36)
+  usuario_id             String?   @db.VarChar(36)
+  checkout_session_id    String?   @db.VarChar(80)
+  origen                 String    @default("manual") @db.VarChar(40)
+  qr_code                String    @unique @db.VarChar(191)
+  clave_corta            String    @unique @db.VarChar(32)
+  total                  Decimal   @default(0) @db.Decimal(10, 2)
+  descuento              Decimal   @default(0) @db.Decimal(10, 2)
+  // Cobro POS barra (Fase 1): medio de pago + efectivo recibido/vuelto.
+  // Naming alineado con entradas POS (medio_pago_presencial): efectivo | tarjeta_manual | transferencia.
+  // monto_recibido y vuelto SOLO aplican a efectivo; en tarjeta/transferencia van NULL.
+  medio_pago             String?   @db.VarChar(30)
+  monto_recibido         Decimal?  @db.Decimal(10, 2)
+  vuelto                 Decimal?  @db.Decimal(10, 2)
+  promocion_id           String?   @db.VarChar(36)
+  estado                 String    @default("pendiente") @db.VarChar(30)
+  canjeado_at            DateTime? @db.Timestamptz()
+  owner_fee_amount       Decimal?  @db.Decimal(10, 2)
+  owner_fee_currency     String?   @db.VarChar(12)
+  owner_fee_mode         String?   @db.VarChar(20)
+  owner_fee_percentage   Decimal?  @db.Decimal(5, 2)
+  owner_fee_fixed_amount Decimal?  @db.Decimal(10, 2)
+  mp_fee_amount          Decimal?  @db.Decimal(10, 2)
+  neto_empresa_amount    Decimal?  @db.Decimal(10, 2)
+  resuelto_at            DateTime? @db.Timestamptz()
+  delivered_amount       Decimal?  @db.Decimal(10, 2)
+  refunded_amount        Decimal?  @db.Decimal(10, 2)
+  refund_case_id         String?   @db.VarChar(36)
+  created_at             DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([checkout_session_id])
+  @@index([comprador_id])
+  @@index([empresa_id, evento_id])
+  @@index([empresa_id, estado, created_at])
+  @@index([evento_id])
+  @@index([empresa_id, barra_id, qr_code])
+  @@index([empresa_id, barra_id, clave_corta])
+  @@index([created_at])
+  @@map("consumibles_ventas")
+}
+
+model ConsumiblesVentaItem {
+  id              String  @id @db.VarChar(36)
+  venta_id        String  @db.VarChar(36)
+  consumible_id   String  @db.VarChar(36)
+  nombre_snapshot String  @db.VarChar(191)
+  precio_unitario Decimal @default(0) @db.Decimal(10, 2)
+  cantidad        Int     @default(0)
+  subtotal        Decimal @default(0) @db.Decimal(10, 2)
+
+  @@index([venta_id])
+  @@map("consumibles_venta_items")
+}
+
+model ConsumiblesVentaResolucionItem {
+  id                   String   @id @db.VarChar(36)
+  venta_id             String   @db.VarChar(36)
+  venta_item_id        String   @unique @db.VarChar(36)
+  consumible_id        String?  @db.VarChar(36)
+  nombre_snapshot      String   @db.VarChar(191)
+  cantidad_total       Int
+  cantidad_entregada   Int      @default(0)
+  cantidad_reembolsada Int      @default(0)
+  monto_entregado      Decimal  @default(0) @db.Decimal(10, 2)
+  monto_reembolsado    Decimal  @default(0) @db.Decimal(10, 2)
+  resolution_reason    String?  @db.VarChar(60)
+  actor_id             String   @db.VarChar(36)
+  actor_type           String   @db.VarChar(20)
+  created_at           DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at           DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([venta_id])
+  @@map("consumibles_venta_resolucion_items")
+}
+
+// ---- Domain: refunds ----
+
+model RefundManualCase {
+  id                        String    @id @db.VarChar(36)
+  empresa_id                String    @db.VarChar(36)
+  checkout_session_id       String    @db.VarChar(80)
+  flow                      String    @db.VarChar(20)
+  status                    String    @db.VarChar(60)
+  payment_id                String?   @db.VarChar(120)
+  payment_status            String?   @db.VarChar(40)
+  reconciliation_status     String?   @db.VarChar(40)
+  requested_amount          Decimal   @default(0) @db.Decimal(10, 2)
+  currency                  String    @default("ARS") @db.VarChar(12)
+  request_reason            String    @db.VarChar(255)
+  request_note              String?   @db.Text
+  request_origin            String    @default("company_manual") @db.VarChar(40)
+  external_refund_reference String?   @db.VarChar(191)
+  evidence_note             String?   @db.Text
+  requester_actor_id        String    @db.VarChar(36)
+  requester_actor_type      String    @db.VarChar(20)
+  requester_buyer_id        String?   @db.VarChar(36)
+  requested_event_id        String?   @db.VarChar(36)
+  requested_entry_id        String?   @db.VarChar(36)
+  requested_sale_id         String?   @db.VarChar(36)
+  company_policy_snapshot   Boolean   @default(false)
+  event_policy_snapshot     Boolean   @default(false)
+  created_by                String    @db.VarChar(36)
+  resolved_by               String?   @db.VarChar(36)
+  created_at                DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                DateTime  @default(now()) @updatedAt @db.Timestamptz()
+  resolved_at               DateTime? @db.Timestamptz()
+
+  @@index([checkout_session_id])
+  @@index([empresa_id, status])
+  @@index([requested_entry_id, status])
+  @@index([requested_sale_id, status])
+  @@index([created_at])
+  @@index([empresa_id, requested_entry_id, created_at])
+  @@map("refund_manual_cases")
+}
+
+model RefundManualCaseItem {
+  id                   String   @id @db.VarChar(36)
+  case_id              String   @db.VarChar(36)
+  target_type          String   @db.VarChar(40)
+  target_id            String   @db.VarChar(36)
+  target_status_before String?  @db.VarChar(60)
+  target_status_after  String?  @db.VarChar(60)
+  eligibility          String   @default("elegible") @db.VarChar(40)
+  block_reason         String?  @db.VarChar(255)
+  amount_snapshot      Decimal? @db.Decimal(10, 2)
+  created_at           DateTime @default(now()) @db.Timestamptz()
+
+  @@index([case_id])
+  @@index([target_type, target_id])
+  @@map("refund_manual_case_items")
+}
+
+model RefundManualCaseEvent {
+  id           String   @id @db.VarChar(36)
+  case_id      String   @db.VarChar(36)
+  event_type   String   @db.VarChar(60)
+  actor_id     String   @db.VarChar(36)
+  actor_type   String   @db.VarChar(20)
+  payload_json String?  @db.Text
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([case_id])
+  @@index([created_at])
+  @@map("refund_manual_case_events")
+}
+
+model RefundManualCaseConsumibleItem {
+  id                  String   @id @db.VarChar(36)
+  case_id             String   @db.VarChar(36)
+  venta_id            String   @db.VarChar(36)
+  venta_item_id       String   @db.VarChar(36)
+  consumible_id       String?  @db.VarChar(36)
+  nombre_snapshot     String   @db.VarChar(191)
+  quantity_original   Int      @default(0)
+  quantity_requested  Int      @default(0)
+  quantity_executed   Int      @default(0)
+  quantity_rejected   Int      @default(0)
+  unit_price_snapshot Decimal  @default(0) @db.Decimal(10, 2)
+  amount_snapshot     Decimal  @default(0) @db.Decimal(10, 2)
+  status              String   @default("requested") @db.VarChar(40)
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([case_id])
+  @@index([venta_id])
+  @@index([venta_item_id])
+  @@index([status])
+  @@index([venta_item_id, status])
+  @@map("refund_manual_case_consumible_items")
+}
+
+model RefundManualCaseConsumibleItemEvent {
+  id                      String   @id @db.VarChar(36)
+  case_id                 String   @db.VarChar(36)
+  consumible_case_item_id String   @db.VarChar(36)
+  event_type              String   @db.VarChar(60)
+  actor_id                String   @db.VarChar(36)
+  actor_type              String   @db.VarChar(20)
+  payload_json            String?  @db.Text
+  created_at              DateTime @default(now()) @db.Timestamptz()
+
+  @@index([case_id])
+  @@index([consumible_case_item_id])
+  @@map("refund_manual_case_consumible_item_events")
+}
+
+// ---- Domain: payments ----
+
+model EmpresaPaymentAccount {
+  id                       String                @id @db.VarChar(36)
+  empresa_id               String                @db.VarChar(36)
+  provider                 PaymentProvider       @default(mercadopago)
+  status                   PaymentAccountStatus  @default(pending_validation)
+  reason                   PaymentAccountReason? @default(validation_pending)
+  credential_ciphertext    String                @db.Text
+  credential_iv            String                @db.VarChar(64)
+  credential_tag           String                @db.VarChar(64)
+  credential_last4         String?               @db.VarChar(4)
+  oauth_refresh_ciphertext String?               @db.Text
+  oauth_refresh_iv         String?               @db.VarChar(64)
+  oauth_refresh_tag        String?               @db.VarChar(64)
+  oauth_token_type         String?               @db.VarChar(40)
+  oauth_scope              String?               @db.Text
+  oauth_expires_at         DateTime?             @db.Timestamptz()
+  oauth_connected_at       DateTime?             @db.Timestamptz()
+  provider_account_label   String?               @db.VarChar(120)
+  validated_at             DateTime?             @db.Timestamptz()
+  last_validation_error    String?               @db.VarChar(80)
+  blocked_at               DateTime?             @db.Timestamptz()
+  created_at               DateTime              @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at               DateTime              @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([empresa_id, provider])
+  @@index([empresa_id, status])
+  @@index([provider, status])
+  @@map("empresa_payment_accounts")
+}
+
+model EmpresaMarketplaceFeeOverride {
+  id                           String   @id @db.VarChar(36)
+  empresa_id                   String   @db.VarChar(36)
+  flow                         String   @db.VarChar(40)
+  mode                         String?  @db.VarChar(20)
+  percentage                   Decimal? @db.Decimal(5, 2)
+  fixed_amount                 Decimal? @db.Decimal(10, 2)
+  updated_by_platform_admin_id String?  @db.VarChar(36)
+  created_at                   DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at                   DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([empresa_id, flow])
+  @@map("empresa_marketplace_fee_overrides")
+}
+
+// ---- Domain: comisiones por volumen (fee tiers) ----
+//
+// Motor que ajusta la comisión de una empresa segun su volumen real de ventas.
+// Ver openspec/changes/fee-tiers-por-volumen/.
+//
+// El motor NO toca el camino del dinero: escribe en
+// empresa_marketplace_fee_overrides y la cascada de resolucion existente
+// (lib/marketplace-fee.ts) hace el resto. La comision se congela en
+// checkout_sessions al crear la sesion, asi que un cambio de tier nunca puede
+// alterar retroactivamente una venta ya cobrada.
+
+// Escalera de comisiones por volumen. Editable desde super-admin SIN deploy:
+// un umbral de comision es un parametro comercial, no una constante de codigo.
+model PlatformFeeTier {
+  id String @id @db.VarChar(36)
+
+  nombre String @db.VarChar(60)
+
+  // Entradas online no canceladas en ventana rolling de 90 dias.
+  // En CANTIDAD, no en ARS: un umbral en pesos se autodesactualiza con la
+  // inflacion argentina (en ~1 año todas las empresas serian "alto volumen"
+  // sin haber vendido una entrada mas).
+  min_entradas_90d Int
+
+  pct_entradas    Decimal @db.Decimal(5, 2)
+  pct_consumibles Decimal @db.Decimal(5, 2)
+
+  // Arranca en false: el codigo se despliega apagado y se activa a mano
+  // recien despues de verificar los conteos en produccion.
+  activo Boolean @default(false)
+  orden  Int     @default(0)
+
+  created_at DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([min_entradas_90d])
+  @@index([activo, min_entradas_90d])
+  @@map("platform_fee_tiers")
+}
+
+// Estado de tier por empresa. empresa_id es la PK (no un id sintetico + unique):
+// una empresa tiene exactamente un estado, y asi la base garantiza el invariante
+// sin codigo que lo defienda.
+model EmpresaFeeTierState {
+  empresa_id String @id @db.VarChar(36)
+
+  current_tier_id  String?   @db.VarChar(36)
+  entradas_ventana Int       @default(0)
+  evaluated_at     DateTime? @db.Timestamptz()
+
+  // Descenso detectado y NO aplicado — espera aprobacion humana (ratchet).
+  // Bajarle la comision a alguien no requiere su consentimiento; subirsela si.
+  pending_downgrade_tier_id String?   @db.VarChar(36)
+  pending_desde             DateTime? @db.Timestamptz()
+
+  // Comision negociada a mano: el job NUNCA la toca, en ninguna direccion.
+  pinned        Boolean @default(false)
+  pinned_por    String? @db.VarChar(36)
+  pinned_motivo String? @db.VarChar(200)
+
+  // @updatedAt informational only — real updates via trigger
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([pending_downgrade_tier_id])
+  @@index([pinned])
+  @@map("empresa_fee_tier_state")
+}
+
+// Auditoria inmutable (solo INSERT). En codigo que mueve plata hay que poder
+// responder "¿por que esta empresa pago 3,5% el 12 de marzo?".
+model EmpresaFeeTierEvent {
+  id         String @id @db.VarChar(36)
+  empresa_id String @db.VarChar(36)
+  flow       String @db.VarChar(40)
+
+  pct_anterior Decimal? @db.Decimal(5, 2)
+  pct_nuevo    Decimal  @db.Decimal(5, 2)
+
+  tier_id     String? @db.VarChar(36)
+  tier_nombre String? @db.VarChar(60)
+
+  // Conteo que motivo la decision — hace cada evaluacion reproducible.
+  entradas_ventana Int
+
+  // 'system' (job) | 'admin' (aprobacion manual de un descenso)
+  origen       String  @db.VarChar(20)
+  aplicado_por String? @db.VarChar(36)
+
+  created_at DateTime @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id, created_at])
+  @@index([origen])
+  @@map("empresa_fee_tier_events")
+}
+
+// ---- Domain: sitio de venta ----
+
+// Plantillas guardables del editor de sitio de venta (Fase A de
+// sitio-venta-editor-plantillas-bloques). `snapshot` es JSON opaco con el mismo
+// shape que SitioVentaForm del frontend (platea/components/dashboard/sitio-venta/types.ts);
+// el backend NO valida su estructura interna, solo que sea un objeto JSON válido.
+// Sin @relation a Empresa: mismo patrón relation-less que el resto del schema
+// (ver comentario en VictoriaTelemetria) — el scoping por empresa_id es a nivel app.
+model EmpresaSitioTemplate {
+  id         String   @id @db.VarChar(36)
+  empresa_id String   @db.VarChar(36)
+  nombre     String   @db.VarChar(60)
+  snapshot   Json     @db.JsonB
+  created_at DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger (no update route in Fase A)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@map("empresa_sitio_templates")
+}
+
+// ---- Domain: marketing ----
+
+model MarketingCampana {
+  id                  Int                        @id @default(autoincrement())
+  empresa_id          String                     @db.VarChar(36) // TODO: originally INT, fixed to VARCHAR(36) to match empresas.id
+  nombre              String                     @db.VarChar(200)
+  tipo                MarketingCampanaTipoEnum   @default(manual)
+  trigger_slug        String?                    @db.VarChar(50)
+  asunto              String                     @db.VarChar(300)
+  contenido_html      String                     @db.Text
+  segmento_id         Int?
+  evento_id           String?                    @db.VarChar(36)
+  estado              MarketingCampanaEstadoEnum @default(borrador)
+  programada_para     DateTime?                  @db.Timestamptz()
+  enviada_at          DateTime?                  @db.Timestamptz()
+  total_destinatarios Int                        @default(0)
+  total_enviados      Int                        @default(0)
+  total_abiertos      Int                        @default(0)
+  total_clicks        Int                        @default(0)
+  total_bounces       Int                        @default(0)
+  total_spam          Int                        @default(0)
+  created_at          DateTime                   @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at          DateTime                   @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@index([estado])
+  @@map("marketing_campanas")
+}
+
+model MarketingEnvio {
+  id                  Int                      @id @default(autoincrement())
+  campana_id          Int?
+  comprador_id        String                   @db.VarChar(36) // TODO: originally INT, fixed to VARCHAR(36) to match compradores.id
+  checkout_session_id String?                  @unique @db.VarChar(255)
+  resend_id           String?                  @db.VarChar(255)
+  estado              MarketingEnvioEstadoEnum @default(pendiente)
+  enviado_at          DateTime?                @db.Timestamptz()
+  abierto_at          DateTime?                @db.Timestamptz()
+  error_mensaje       String?                  @db.VarChar(500)
+
+  @@index([campana_id])
+  @@index([comprador_id])
+  @@index([checkout_session_id])
+  @@index([resend_id])
+  @@map("marketing_envios")
+}
+
+model MarketingSegmento {
+  id          Int                       @id @default(autoincrement())
+  empresa_id  String                    @db.VarChar(36) // TODO: originally INT, fixed to VARCHAR(36) to match empresas.id
+  nombre      String                    @db.VarChar(100)
+  descripcion String?                   @db.Text
+  tipo        MarketingSegmentoTipoEnum @default(manual)
+  activo      Boolean                   @default(true)
+  created_at  DateTime                  @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@map("marketing_segmentos")
+}
+
+model MarketingSegmentoComprador {
+  segmento_id  Int      @db.Integer
+  comprador_id String   @db.VarChar(36)
+  agregado_at  DateTime @default(now()) @db.Timestamptz()
+
+  @@id([segmento_id, comprador_id])
+  @@index([comprador_id])
+  @@map("marketing_segmentos_compradores")
+}
+
+model MarketingCodigoDescuento {
+  id            Int                        @id @default(autoincrement())
+  empresa_id    String                     @db.VarChar(36)
+  codigo        String                     @db.VarChar(50)
+  tipo          MarketingCodigoTipoEnum    @default(porcentaje)
+  valor         Decimal                    @db.Decimal(10, 2)
+  aplica_a      MarketingCodigoAplicaAEnum @default(todos)
+  usos_maximos  Int?
+  usos_actuales Int                        @default(0)
+  monto_minimo  Decimal?                   @db.Decimal(10, 2)
+  valido_desde  DateTime?                  @db.Timestamptz()
+  valido_hasta  DateTime?                  @db.Timestamptz()
+  evento_id     String?                    @db.VarChar(36)
+  activo        Boolean                    @default(true)
+  created_at    DateTime                   @default(now()) @db.Timestamptz()
+
+  @@unique([empresa_id, codigo])
+  @@index([empresa_id])
+  @@index([evento_id])
+  @@map("marketing_codigos_descuento")
+}
+
+model MarketingCodigoDescuentoUso {
+  id                  Int      @id @default(autoincrement())
+  codigo_id           Int
+  comprador_id        String?  @db.VarChar(36) // TODO: originally INT, fixed to VARCHAR(36) to match compradores.id
+  checkout_session_id String?  @db.VarChar(255)
+  descuento_aplicado  Decimal  @db.Decimal(10, 2)
+  usado_at            DateTime @default(now()) @db.Timestamptz()
+
+  @@index([codigo_id])
+  @@index([checkout_session_id])
+  @@map("marketing_codigos_descuento_usos")
+}
+
+model MarketingOAuthAccount {
+  id                       String    @id @db.VarChar(36)
+  empresa_id               String    @db.VarChar(36)
+  provider                 String    @default("google") @db.VarChar(20)
+  status                   String    @default("pending") @db.VarChar(30)
+  access_token_ciphertext  String    @db.Text
+  access_token_iv          String    @db.VarChar(64)
+  access_token_tag         String    @db.VarChar(64)
+  refresh_token_ciphertext String?   @db.Text
+  refresh_token_iv         String?   @db.VarChar(64)
+  refresh_token_tag        String?   @db.VarChar(64)
+  account_email            String?   @db.VarChar(191)
+  scopes                   String?   @db.VarChar(500)
+  expires_at               DateTime? @db.Timestamptz()
+  connected_at             DateTime? @db.Timestamptz()
+  ga4_property_id          String?   @db.VarChar(100)
+  ga4_measurement_id       String?   @db.VarChar(50)
+  gtm_account_id           String?   @db.VarChar(50)
+  gtm_container_id         String?   @db.VarChar(50)
+  created_at               DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at               DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@unique([empresa_id, provider])
+  @@map("marketing_oauth_accounts")
+}
+
+// ---- Domain: misc / audit ----
+
+// TODO (Phase 4): Remove ensureAuditSchema() raw DDL from consumibles-redeem.ts
+//   once this model is the authoritative source and migration has been applied.
+model ConsumiblesCanjeAuditoria {
+  id               String   @id @db.VarChar(36)
+  venta_id         String?  @db.VarChar(36)
+  empresa_id       String   @db.VarChar(36)
+  evento_id        String?  @db.VarChar(36)
+  barra_id         String?  @db.VarChar(36)
+  actor_id         String?  @db.VarChar(36)
+  actor_type       String?  @db.VarChar(20)
+  accion           String   @db.VarChar(40)
+  codigo_ingresado String?  @db.VarChar(255)
+  motivo           String?  @db.VarChar(255)
+  detalle_json     String?  @db.Text
+  created_at       DateTime @default(now()) @db.Timestamptz()
+
+  @@index([venta_id])
+  @@index([empresa_id, created_at])
+  @@index([empresa_id, accion])
+  @@map("consumibles_canje_auditoria")
+}
+
+model AuditLog {
+  id           Int      @id @default(autoincrement())
+  actor_id     String?  @db.VarChar(36)
+  actor_email  String?  @db.VarChar(255)
+  actor_label  String?  @db.VarChar(255)
+  actor_type   String?  @db.VarChar(50)
+  action       String   @db.VarChar(100)
+  entity_type  String?  @db.VarChar(50)
+  entity_id    String?  @db.VarChar(100)
+  entity_label String?  @db.VarChar(255)
+  payload      Json?    @db.JsonB
+  ip_address   String?  @db.VarChar(45)
+  created_at   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([created_at(sort: Desc)])
+  @@index([actor_id])
+  @@index([action])
+  @@index([entity_type, entity_id])
+  @@map("audit_logs")
+}
+
+model ErrorLog {
+  id              Int       @id @default(autoincrement())
+  fingerprint     String    @unique @db.VarChar(64)
+  source          String    @db.VarChar(20)
+  severity        String    @db.VarChar(20)
+  message         String    @db.Text
+  stack           String?   @db.Text
+  context         Json?     @db.JsonB
+  user_agent      String?   @db.VarChar(500)
+  ip_address      String?   @db.VarChar(45)
+  count_total     Int       @default(1)
+  first_seen_at   DateTime  @default(now()) @db.Timestamptz()
+  last_seen_at    DateTime  @default(now()) @db.Timestamptz()
+  resolved_at     DateTime? @db.Timestamptz()
+  resolved_by     String?   @db.VarChar(36)
+  // Última vez que se despachó una alerta por email para este fingerprint.
+  // Gobierna el cooldown anti-spam: re-alertamos un error recurrente como mucho
+  // una vez por ventana de cooldown.
+  last_alerted_at DateTime? @db.Timestamptz()
+
+  @@index([last_seen_at(sort: Desc)])
+  @@index([source, last_seen_at(sort: Desc)])
+  @@index([resolved_at, last_seen_at(sort: Desc)])
+  @@map("error_logs")
+}
+
+// ---- Domain: consumibles / barra ops ----
+
+model BarraRestockAlerta {
+  id                   String    @id @db.VarChar(36)
+  empresa_id           String    @db.VarChar(36)
+  evento_id            String    @db.VarChar(36)
+  barra_id             String    @db.VarChar(36)
+  barra_stock_id       String    @db.VarChar(36)
+  consumible_id        String    @db.VarChar(36)
+  estado               String    @default("pendiente") @db.VarChar(20)
+  nota                 String?   @db.Text
+  requested_by_user_id String?   @db.VarChar(36)
+  resolved_by_user_id  String?   @db.VarChar(36)
+  resolved_at          DateTime? @db.Timestamptz()
+  created_at           DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([barra_stock_id, estado])
+  @@index([barra_id, empresa_id])
+  @@index([consumible_id, empresa_id])
+  @@map("barra_restock_alertas")
+}
+
+model ConsumiblePromocion {
+  id              String    @id @db.VarChar(36)
+  empresa_id      String    @db.VarChar(36)
+  evento_id       String?   @db.VarChar(36)
+  nombre          String    @db.VarChar(120)
+  descripcion     String?   @db.Text
+  tipo            String    @db.VarChar(30)
+  valor           Decimal   @db.Decimal(10, 2)
+  consumible_ids  String    @db.Text
+  cantidad_minima Int       @default(1)
+  activa          Boolean   @default(true)
+  fecha_inicio    DateTime? @db.Timestamptz()
+  fecha_fin       DateTime? @db.Timestamptz()
+  created_at      DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id, activa])
+  @@index([empresa_id, evento_id])
+  @@map("consumibles_promociones")
+}
+
+model EmpleadoActividad {
+  id          String   @id @db.VarChar(36)
+  empresa_id  String   @db.VarChar(36)
+  empleado_id String   @db.VarChar(36)
+  tipo        String   @db.VarChar(50)
+  descripcion String   @db.VarChar(500)
+  metadata    Json?    @db.JsonB
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id, empleado_id])
+  @@index([empresa_id, tipo])
+  @@index([created_at])
+  @@map("empleados_actividad")
+}
+
+model StorageCleanupRun {
+  id                     Int      @id @default(autoincrement())
+  started_at             DateTime @default(now()) @db.Timestamptz()
+  finished_at            DateTime @db.Timestamptz()
+  duration_ms            Int      @default(0)
+  scanned                Int      @default(0)
+  in_use                 Int      @default(0)
+  within_cooldown        Int      @default(0)
+  orphans                Int      @default(0)
+  deleted                Int      @default(0)
+  failed                 Int      @default(0)
+  cooldown_hours         Int      @default(24)
+  dry_run                Boolean  @default(false)
+  triggered_by           String   @default("cron") @db.VarChar(20)
+  triggered_by_user_id   String?  @db.VarChar(64)
+  triggered_by_user_name String?  @db.VarChar(191)
+  status                 String   @default("ok") @db.VarChar(20)
+  reason                 String?  @db.VarChar(120)
+  sample_paths           String?  @db.Text
+
+  @@index([started_at(sort: Desc)])
+  @@index([triggered_by])
+  @@map("storage_cleanup_runs")
+}
+
+model SoporteMensaje {
+  id            Int      @id @default(autoincrement())
+  empresa_id    String   @db.VarChar(64)
+  nombre        String   @db.VarChar(100)
+  email         String   @db.VarChar(254)
+  mensaje       String   @db.Text
+  email_enviado Boolean  @default(false)
+  created_at    DateTime @default(now()) @db.Timestamptz()
+
+  @@index([empresa_id])
+  @@index([created_at])
+  @@map("soporte_mensajes")
+}
+
+// ---- Domain: delivery ----
+
+model BuyerPhoneVerificationChallenge {
+  id                  String    @id @db.VarChar(36)
+  buyer_id            String    @db.VarChar(36)
+  empresa_id          String    @db.VarChar(36)
+  phone_e164          String    @db.VarChar(32)
+  provider            String?   @db.VarChar(40)
+  code_hash           String    @db.VarChar(128)
+  status              String    @default("pending") @db.VarChar(30)
+  attempts_count      Int       @default(0)
+  max_attempts        Int       @default(5)
+  expires_at          DateTime  @db.Timestamptz()
+  resend_available_at DateTime? @db.Timestamptz()
+  verified_at         DateTime? @db.Timestamptz()
+  invalidated_at      DateTime? @db.Timestamptz()
+  invalidation_reason String?   @db.VarChar(60)
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([buyer_id, status, expires_at])
+  @@index([empresa_id, phone_e164])
+  @@map("buyer_phone_verification_challenges")
+}
+
+model DeliveryDispatchAttempt {
+  id                  String    @id @db.VarChar(36)
+  checkout_session_id String    @db.VarChar(80)
+  buyer_id            String?   @db.VarChar(36)
+  empresa_id          String    @db.VarChar(36)
+  channel             String    @db.VarChar(20)
+  status              String    @db.VarChar(30)
+  provider            String?   @db.VarChar(40)
+  recipient           String?   @db.VarChar(191)
+  error_code          String?   @db.VarChar(60)
+  error_message       String?   @db.VarChar(255)
+  payload_json        String?   @db.Text
+  dispatched_at       DateTime? @db.Timestamptz()
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([checkout_session_id])
+  @@index([buyer_id, channel])
+  @@index([status, channel])
+  @@map("delivery_dispatch_attempts")
+}
+
+// ---- Domain: rate limiting ----
+
+model RateLimitBucket {
+  bucket_key  String   @id @db.VarChar(191)
+  hits        Int
+  reset_at_ms BigInt
+  created_at  DateTime @default(now()) @db.Timestamptz()
+  // @updatedAt informational only — real updates via trigger
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([reset_at_ms])
+  @@map("rate_limit_buckets")
+}
+
+// ---- Domain: landing / marketing public ----
+
+model LandingAnnouncement {
+  id               String   @id @db.VarChar(36)
+  content_html     String   @db.Text
+  cta_label        String?  @db.VarChar(120)
+  cta_href         String?  @db.VarChar(500)
+  active           Boolean  @default(true)
+  animation_mode   String   @default("static") @db.VarChar(32)
+  animation_speed  String   @default("normal") @db.VarChar(16)
+  background_color String?  @db.VarChar(20)
+  updated_by       String?  @db.VarChar(36)
+  // @updatedAt informational only — real updates via trigger
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  @@index([active, updated_at])
+  @@map("landing_announcement")
+}
+
+// ---- Domain: platform settings (singleton) ----
+
+// Configuración global de la plataforma. Tabla singleton: una sola fila con
+// id = 'singleton'. Hoy controla la auto-aprobación de empresas en el registro
+// público (si está activa, las empresas nuevas quedan aprobadas sin intervención).
+model PlatformSetting {
+  id                    String   @id @db.VarChar(36)
+  auto_aprobar_empresas Boolean  @default(false)
+  // Gate de la vidriera cross-tenant. Es un LATCH: se enciende solo cuando hay 2+
+  // empresas elegibles con eventos listados, y una vez encendido NO se apaga aunque
+  // el conteo vuelva a bajar. Motivo: /eventos es una pagina publica indexable — si
+  // apareciera y desapareciera segun cuantas empresas hay en ese momento, romperia
+  // el SEO y todos los links ya compartidos.
+  vidriera_habilitada    Boolean   @default(false)
+  vidriera_habilitada_at DateTime? @db.Timestamptz()
+  updated_at            DateTime @default(now()) @updatedAt @db.Timestamptz()
+  updated_by            String?  @db.VarChar(36)
+
+  @@map("platform_settings")
+}
+
+// ---- Domain: Victoria (asistente) telemetría ----
+
+// Feedback del asistente Victoria capturado desde el browser (browser → BFF → backend),
+// fire-and-forget. Append-only, sólo para descubrir vocabulario faltante y medir votos.
+// PRIVACIDAD: sin user_id, sin IP, sin email — sólo empresa_id (de la sesión autenticada).
+// query_text/topic_id/ruta van capados y con control-chars stripeados en la capa de ruta.
+//   tipo='fallback' → query_text = texto buscado sin respuesta; topic_id/voto NULL.
+//   tipo='voto'     → topic_id + voto ('up'|'down'); query_text NULL.
+// Sin @relation a Empresa: el schema entero es relation-less y ninguna tabla declara FK a
+// empresas (mismo patrón que waitlist_entries, error_logs, etc.). El scoping es a nivel app.
+model VictoriaTelemetria {
+  id        BigInt   @id @default(autoincrement())
+  empresaId String   @map("empresa_id") @db.VarChar(36)
+  tipo      String   @db.VarChar(20)
+  queryText String?  @map("query_text") @db.VarChar(200)
+  topicId   String?  @map("topic_id") @db.VarChar(100)
+  voto      String?  @db.VarChar(10)
+  ruta      String?  @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([empresaId, createdAt])
+  @@index([tipo, createdAt])
+  @@map("victoria_telemetria")
+}

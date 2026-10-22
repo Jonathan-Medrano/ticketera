@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200">
+  <rect x="14" y="40" width="120" height="120" rx="30" fill="#a3e635"/>
+  <path d="M34 100h22l12-34 22 68 14-34h18" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="160" y="112" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="64" letter-spacing="2" fill="#f4f4f5">NOCTURNA</text>
+  <text x="162" y="150" font-family="Arial, sans-serif" font-size="24" letter-spacing="9" fill="#a3e635">PRODUCCIONES</text>
+</svg>

@@ -19,7 +19,7 @@ function getLocalCandidateDomains() {
   const rootDomainRaw = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "Ticketera.local:3000"
   const rootDomain = rootDomainRaw.split(":")[0]
 
-  return Array.from(new Set([rootDomain, "Ticketera.local", "miplatea.local", "localhost", "127.0.0.1"]))
+  return Array.from(new Set([rootDomain, "Ticketera.local", "localhost", "127.0.0.1"]))
 }
 
 function isLocalEquivalentHostname(hostname: string) {
